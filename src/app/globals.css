@@ -4,35 +4,35 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #0a0a0a;
-  --card: #f9f9f9;
-  --card-foreground: #0a0a0a;
-  --border: #e5e5e5;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --accent: #f5f5f5;
-  --accent-foreground: #0a0a0a;
-  --ring: #d4d4d4;
-  --radius: 0.75rem;
-  --glow: rgba(0, 0, 0, 0.04);
-  --glass-bg: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(0, 0, 0, 0.06);
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --border: #e2e2e2;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --ring: #18181b;
+  --radius: 1rem;
+  --glow: rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.08);
 }
 
 .dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --card: #111111;
-  --card-foreground: #ededed;
-  --border: #222222;
-  --muted: #171717;
-  --muted-foreground: #a3a3a3;
-  --accent: #1a1a1a;
-  --accent-foreground: #ededed;
-  --ring: #333333;
-  --glow: rgba(255, 255, 255, 0.03);
-  --glass-bg: rgba(17, 17, 17, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.06);
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --border: #262626;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #fafafa;
+  --ring: #e4e4e7;
+  --glow: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(0, 0, 0, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.12);
 }
 
 /* ── Tailwind Theme ────────────────────────────────────────────────────── */
@@ -60,7 +60,7 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  /* Using react-lenis instead of native smooth scroll for better physics */
 }
 
 body {
@@ -69,69 +69,75 @@ body {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
 }
 
 /* ── Scrollbar ─────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted-foreground);
+  width: 0px; 
+  /* Hide scrollbar since lenis brings its own scroll feel, or keep minimal */
 }
 
 /* ── Selection ─────────────────────────────────────────────────────────── */
 
 ::selection {
-  background: rgba(0, 0, 0, 0.12);
-  color: var(--foreground);
-}
-
-.dark ::selection {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--foreground);
+  color: var(--background);
 }
 
 /* ── Glassmorphism ─────────────────────────────────────────────────────── */
 
 .glass {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px) saturate(1.2);
-  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
   border: 1px solid var(--glass-border);
 }
 
 /* ── Glow Effects ──────────────────────────────────────────────────────── */
 
 .glow-sm {
-  box-shadow: 0 0 20px var(--glow), 0 0 40px var(--glow);
+  box-shadow: 0 4px 20px var(--glow);
 }
 
 .glow-md {
-  box-shadow: 0 0 40px var(--glow), 0 0 80px var(--glow);
+  box-shadow: 0 8px 40px var(--glow);
+}
+
+.glow-focus {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+/* ── Skeleton Loading ──────────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--border) 50%,
+    var(--muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+.clip-text {
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* ── Animations ────────────────────────────────────────────────────────── */
 
 @keyframes pulse-ring {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.5;
-  }
-  80%, 100% {
-    transform: scale(2.2);
-    opacity: 0;
-  }
+  0% { transform: scale(0.8); opacity: 0.5; }
+  80%, 100% { transform: scale(2.2); opacity: 0; }
 }
 
 @keyframes waveform {
@@ -147,21 +153,12 @@ body {
   animation: waveform 0.6s ease-in-out infinite;
 }
 
-/* ── Skeleton Loading ──────────────────────────────────────────────────── */
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+@keyframes spotlight {
+  0% { opacity: 0; transform: translate(-72%, -62%) scale(0.5); }
+  100% { opacity: 1; transform: translate(-50%,-40%) scale(1); }
 }
 
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--muted) 25%,
-    var(--accent) 50%,
-    var(--muted) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: var(--radius);
+.animate-spotlight {
+  animation: spotlight 2s ease .75s 1 forwards;
 }
+
