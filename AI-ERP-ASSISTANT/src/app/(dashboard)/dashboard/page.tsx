@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -13,6 +14,7 @@ import {
   Clock,
 } from "lucide-react";
 import { Card, StatCard } from "@/components/Cards";
+import { fetchDashboardStats, DashboardStats } from "@/lib/api";
 
 const stagger = {
   animate: { transition: { staggerChildren: 0.08 } },
@@ -54,30 +56,34 @@ const quickActions = [
   },
 ];
 
-const recentQueries = [
-  {
-    query: "What is my attendance for CSE301?",
-    time: "2 min ago",
-    status: "answered",
-  },
-  {
-    query: "Show me last semester grades",
-    time: "15 min ago",
-    status: "answered",
-  },
-  {
-    query: "When is the next exam?",
-    time: "1 hour ago",
-    status: "answered",
-  },
-  {
-    query: "Download attendance report",
-    time: "3 hours ago",
-    status: "completed",
-  },
-];
+// Default static data (used when backend is unavailable)
+const defaultStats = {
+  totalQueries: "1,247",
+  totalQueriesTrend: "+12.5%",
+  avgResponse: "0.8s",
+  avgResponseTrend: "-15%",
+  activeSessions: "23",
+  activeSessionsTrend: "+3",
+  successRate: "98.2%",
+  successRateTrend: "+0.5%",
+  recentQueries: [
+    { query: "What is my attendance for CSE301?", time: "2 min ago", status: "answered" },
+    { query: "Show me last semester grades", time: "15 min ago", status: "answered" },
+    { query: "When is the next exam?", time: "1 hour ago", status: "answered" },
+    { query: "Download attendance report", time: "3 hours ago", status: "completed" },
+  ],
+};
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats>(defaultStats);
+
+  // Fetch live stats from backend on mount
+  useEffect(() => {
+    fetchDashboardStats().then((data) => {
+      if (data) setStats(data);
+    });
+  }, []);
+
   return (
     <div className="p-6 lg:p-8 max-w-6xl">
       {/* Header */}
@@ -103,37 +109,37 @@ export default function DashboardPage() {
         </motion.h1>
       </motion.div>
 
-      {/* Stat Cards */}
+      {/* Stat Cards — now driven by backend data */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           icon={<BookOpen className="h-5 w-5" />}
           label="Total Queries"
-          value="1,247"
-          trend="+12.5%"
+          value={stats.totalQueries}
+          trend={stats.totalQueriesTrend}
           trendUp={true}
           delay={0}
         />
         <StatCard
           icon={<Clock className="h-5 w-5" />}
           label="Avg Response"
-          value="0.8s"
-          trend="-15%"
+          value={stats.avgResponse}
+          trend={stats.avgResponseTrend}
           trendUp={true}
           delay={0.08}
         />
         <StatCard
           icon={<Users className="h-5 w-5" />}
           label="Active Sessions"
-          value="23"
-          trend="+3"
+          value={stats.activeSessions}
+          trend={stats.activeSessionsTrend}
           trendUp={true}
           delay={0.16}
         />
         <StatCard
           icon={<TrendingUp className="h-5 w-5" />}
           label="Success Rate"
-          value="98.2%"
-          trend="+0.5%"
+          value={stats.successRate}
+          trend={stats.successRateTrend}
           trendUp={true}
           delay={0.24}
         />
@@ -176,7 +182,7 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* Recent Activity */}
+      {/* Recent Activity — now driven by backend data */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -185,7 +191,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
         <Card hover={false}>
           <div className="divide-y divide-border">
-            {recentQueries.map((item, i) => (
+            {stats.recentQueries.map((item, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, x: -10 }}

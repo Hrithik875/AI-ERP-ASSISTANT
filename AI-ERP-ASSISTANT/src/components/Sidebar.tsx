@@ -87,6 +87,7 @@ export default function Sidebar() {
       {/* Collapse Toggle */}
       <div className="p-3 border-t border-border">
         <button
+          suppressHydrationWarning
           onClick={() => setCollapsed(!collapsed)}
           className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
         >

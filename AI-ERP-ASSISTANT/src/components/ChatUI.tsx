@@ -33,6 +33,25 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
     }
   }, [messages]);
 
+  // Load persistently stored session history to prevent navigation destruction
+  useEffect(() => {
+    const savedSession = localStorage.getItem("erp_chat_history");
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        parsed.forEach((m: any) => m.timestamp = new Date(m.timestamp));
+        setMessages(parsed);
+      } catch (e) {}
+    }
+  }, []);
+
+  // Save history on changes
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem("erp_chat_history", JSON.stringify(messages));
+    }
+  }, [messages]);
+
   useImperativeHandle(ref, () => ({
     addTranscript(text: string, response: string) {
       const userMsg: ChatMessage = {
@@ -86,11 +105,12 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex flex-col h-full w-full overflow-hidden">
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-6 space-y-4"
+        className="flex-1 overflow-y-scroll px-4 py-6 space-y-4"
+        style={{ overscrollBehavior: "contain" }}
       >
         {messages.length === 0 && (
           <motion.div
@@ -135,6 +155,7 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
               >
                 <p className="whitespace-pre-wrap">{msg.content}</p>
                 <p
+                  suppressHydrationWarning
                   className={cn(
                     "mt-1.5 text-[10px]",
                     msg.role === "user"
@@ -193,8 +214,9 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
 
       {/* Input */}
       <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="flex items-center gap-3">
+        <form onSubmit={handleSubmit} className="flex items-center gap-3" suppressHydrationWarning>
           <input
+            suppressHydrationWarning
             ref={inputRef}
             type="text"
             value={input}
@@ -204,6 +226,7 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
             className="flex-1 bg-accent rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors duration-200 disabled:opacity-50"
           />
           <motion.button
+            suppressHydrationWarning
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             type="submit"

@@ -1,3 +1,5 @@
+"use client";
+
 import { ThemeProvider } from "next-themes";
 import { ReactNode } from "react";
 import { ReactLenis } from "lenis/react";

@@ -1,41 +1,19 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Next.js
+AI-ERP-ASSISTANT/.next/
+AI-ERP-ASSISTANT/out/
+AI-ERP-ASSISTANT/build/
+AI-ERP-ASSISTANT/node_modules/
+AI-ERP-ASSISTANT/.env*.local
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# Python
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/env/
+backend/venv/
+backend/package/
+backend/lambda_package.zip
 
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
+# Misc
 .DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+*.log

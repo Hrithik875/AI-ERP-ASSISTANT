@@ -23,6 +23,7 @@ export default function VoiceRecorder({
   const animationRef = useRef<number>(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const drawWaveform = useCallback(() => {
     const canvas = canvasRef.current;
@@ -90,12 +91,41 @@ export default function VoiceRecorder({
         onRecordingComplete(blob);
         stream.getTracks().forEach((track) => track.stop());
         cancelAnimationFrame(animationRef.current);
+        if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
       onStatusChange?.("listening");
       drawWaveform();
+
+      // Voice Activity Detection (Auto-pause feature)
+      let lastSpokenTime = Date.now();
+      let hasSpoken = false;
+
+      silenceTimerRef.current = setInterval(() => {
+        if (!analyserRef.current) return;
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        // Strictly monitor absolute spike frequency
+        const maxVol = Math.max(...dataArray);
+        const isSpeaking = maxVol > 20;
+
+        if (isSpeaking) {
+          lastSpokenTime = Date.now();
+          hasSpoken = true;
+        } else if (hasSpoken && Date.now() - lastSpokenTime > 3000) {
+          // Exactly 3 seconds of absolute silence detected
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+             mediaRecorderRef.current.stop();
+             setIsRecording(false);
+             onStatusChange?.("processing");
+          }
+          if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
+        }
+      }, 100);
+
     } catch (err) {
       console.error("Microphone access denied:", err);
     }
@@ -106,6 +136,7 @@ export default function VoiceRecorder({
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       onStatusChange?.("processing");
+      if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     }
   };
 
@@ -113,6 +144,7 @@ export default function VoiceRecorder({
     return () => {
       cancelAnimationFrame(animationRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
     };
   }, []);
 
@@ -181,6 +213,7 @@ export default function VoiceRecorder({
         </AnimatePresence>
 
         <motion.button
+          suppressHydrationWarning
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={isRecording ? stopRecording : startRecording}
