@@ -45,18 +45,19 @@ export default function VoiceRecorder({
       const barWidth = 3;
       const gap = 2;
       const bars = Math.floor(canvas.width / (barWidth + gap));
-      const startIndex = Math.floor((bufferLength - bars) / 2);
+      const startIndex = 2; // Start near the bass/low-mid bins for voice fundamental frequencies
 
       for (let i = 0; i < bars; i++) {
         const value = dataArray[startIndex + i] || 0;
-        const height = (value / 255) * canvas.height * 0.8;
+        const cleanValue = value < 10 ? 0 : value; // Lower noise floor
+        const height = Math.max(4, (cleanValue / 255) * canvas.height * 0.9);
         const x = i * (barWidth + gap);
         const y = (canvas.height - height) / 2;
 
         const computedStyle = getComputedStyle(document.documentElement);
         const fg = computedStyle.getPropertyValue("--foreground").trim();
 
-        ctx.fillStyle = fg.startsWith("#") ? fg + "60" : "rgba(255,255,255,0.35)";
+        ctx.fillStyle = fg.startsWith("#") ? fg + "80" : "rgba(255,255,255,0.5)";
         ctx.beginPath();
         ctx.roundRect(x, y, barWidth, height, 1.5);
         ctx.fill();
@@ -102,6 +103,7 @@ export default function VoiceRecorder({
       // Voice Activity Detection (Auto-pause feature)
       let lastSpokenTime = Date.now();
       let hasSpoken = false;
+      const startTime = Date.now();
 
       silenceTimerRef.current = setInterval(() => {
         if (!analyserRef.current) return;
@@ -112,17 +114,23 @@ export default function VoiceRecorder({
         const maxVol = Math.max(...dataArray);
         const isSpeaking = maxVol > 20;
 
+        const now = Date.now();
         if (isSpeaking) {
-          lastSpokenTime = Date.now();
+          lastSpokenTime = now;
           hasSpoken = true;
-        } else if (hasSpoken && Date.now() - lastSpokenTime > 3000) {
-          // Exactly 3 seconds of absolute silence detected
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-             mediaRecorderRef.current.stop();
-             setIsRecording(false);
-             onStatusChange?.("processing");
+        } else {
+          const timeout = hasSpoken ? 1500 : 3000;
+          const timeSince = hasSpoken ? (now - lastSpokenTime) : (now - startTime);
+
+          if (timeSince > timeout) {
+            // Silence detected: stop recording automatically
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+               mediaRecorderRef.current.stop();
+               setIsRecording(false);
+               onStatusChange?.("processing");
+            }
+            if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
           }
-          if (silenceTimerRef.current) clearInterval(silenceTimerRef.current);
         }
       }, 100);
 
@@ -182,8 +190,8 @@ export default function VoiceRecorder({
             {Array.from({ length: 32 }).map((_, i) => (
               <div
                 key={i}
-                className="w-[3px] rounded-full bg-border"
-                style={{ height: `${8 + Math.sin(i * 0.5) * 6}px` }}
+                className="w-[3px] rounded-full bg-border transition-all duration-300"
+                style={{ height: "4px" }}
               />
             ))}
           </motion.div>

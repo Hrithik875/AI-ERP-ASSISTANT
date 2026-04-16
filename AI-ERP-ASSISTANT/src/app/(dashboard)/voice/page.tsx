@@ -26,13 +26,21 @@ export default function VoicePage() {
   }, []);
 
   return (
-    <div className="flex flex-col lg:flex-row h-[calc(100vh-4rem)]">
-      {/* Voice Recorder Panel */}
+    <div className="flex flex-col lg:flex-row h-[calc(100dvh-9rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative">
+      {/* Mobile-only Header */}
+      <div className="lg:hidden shrink-0 border-b border-border p-4 bg-card/30 flex items-center justify-between z-10">
+        <div>
+          <h1 className="text-xl font-bold font-[family-name:var(--font-space)]">Voice Assistant</h1>
+          <p className="text-xs text-muted-foreground">Speak naturally to query your ERP</p>
+        </div>
+      </div>
+
+      {/* Desktop Voice Recorder Panel (Hidden on mobile) */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col items-center justify-center p-8 lg:p-12 lg:w-[420px] border-b lg:border-b-0 lg:border-r border-border bg-card/30"
+        className="hidden lg:flex flex-col items-center justify-center p-12 lg:w-[420px] border-r border-border bg-card/30 shrink-0"
       >
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold tracking-tight mb-2 font-[family-name:var(--font-space)]">
@@ -84,9 +92,21 @@ export default function VoicePage() {
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.5, delay: 0.1 }}
-        className="flex-1 flex flex-col min-h-0"
+        className="flex-1 flex flex-col h-full min-h-0 relative z-0"
       >
-        <ChatUI ref={chatRef} initialMessages={mockMessages} />
+        <ChatUI 
+          ref={chatRef} 
+          initialMessages={mockMessages} 
+          bottomSlot={
+            <div className="lg:hidden flex flex-col items-center justify-center pt-2 border-b border-border/10 pb-0">
+               <VoiceRecorder
+                 onRecordingComplete={handleRecordingComplete}
+                 onStatusChange={(s) => setStatus(s)}
+                 status={status}
+               />
+            </div>
+          }
+        />
       </motion.div>
     </div>
   );

@@ -12,10 +12,11 @@ export interface ChatUIHandle {
 
 interface ChatUIProps {
   initialMessages?: ChatMessage[];
+  bottomSlot?: React.ReactNode;
 }
 
 const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
-  { initialMessages = [] },
+  { initialMessages = [], bottomSlot },
   ref
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -109,8 +110,7 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-scroll px-4 py-6 space-y-4"
-        style={{ overscrollBehavior: "contain" }}
+        className="flex-1 overflow-y-auto min-h-0 px-4 py-6 space-y-4"
       >
         {messages.length === 0 && (
           <motion.div
@@ -213,33 +213,36 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
       </div>
 
       {/* Input */}
-      <div className="border-t border-border p-4">
-        <form onSubmit={handleSubmit} className="flex items-center gap-3" suppressHydrationWarning>
-          <input
-            suppressHydrationWarning
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your query…"
-            disabled={isLoading}
-            className="flex-1 bg-accent rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors duration-200 disabled:opacity-50"
-          />
-          <motion.button
-            suppressHydrationWarning
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            type="submit"
-            disabled={!input.trim() || isLoading}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-foreground text-background transition-opacity disabled:opacity-30"
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </motion.button>
-        </form>
+      <div className="border-t border-border bg-background pt-2 z-10 flex flex-col">
+        {bottomSlot}
+        <div className="p-4 pt-2">
+          <form onSubmit={handleSubmit} className="flex items-center gap-3" suppressHydrationWarning>
+            <input
+              suppressHydrationWarning
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type your query…"
+              disabled={isLoading}
+              className="flex-1 bg-accent rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none border border-transparent focus:border-border transition-colors duration-200 disabled:opacity-50"
+            />
+            <motion.button
+              suppressHydrationWarning
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-foreground text-background transition-opacity disabled:opacity-30 shrink-0"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </motion.button>
+          </form>
+        </div>
       </div>
     </div>
   );

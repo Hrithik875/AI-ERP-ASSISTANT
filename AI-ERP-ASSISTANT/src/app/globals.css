@@ -75,8 +75,20 @@ body {
 /* ── Scrollbar ─────────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 0px; 
-  /* Hide scrollbar since lenis brings its own scroll feel, or keep minimal */
+  width: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
 }
 
 /* ── Selection ─────────────────────────────────────────────────────────── */

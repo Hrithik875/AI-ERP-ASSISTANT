@@ -59,12 +59,20 @@ Write-Host "  Done." -ForegroundColor Green
 
 # ── Step 6: Automated AWS Deploy ─────────────────────────────────────────
 Write-Host "[6/6] Pushing to AWS (S3 -> Lambda)..." -ForegroundColor Yellow
-if (Get-Command aws -ErrorAction SilentlyContinue) {
+
+$awsCmd = "aws"
+if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+    if (Test-Path "$env:ProgramFiles\Amazon\AWSCLIV2\aws.exe") {
+        $awsCmd = "$env:ProgramFiles\Amazon\AWSCLIV2\aws.exe"
+    }
+}
+
+if ((Get-Command aws -ErrorAction SilentlyContinue) -or ($awsCmd -ne "aws")) {
     Write-Host "  -> Uploading ZIP to S3 Bucket..." -ForegroundColor Gray
-    aws s3 cp "lambda_package.zip" "s3://bmsce-ai-erp-voice-bucket/lambda_package.zip" --region ap-southeast-2
+    & $awsCmd s3 cp "lambda_package.zip" "s3://bmsce-ai-erp-voice-bucket/lambda_package.zip" --region ap-southeast-2
 
     Write-Host "  -> Updating Lambda Function..." -ForegroundColor Gray
-    aws lambda update-function-code `
+    & $awsCmd lambda update-function-code `
         --function-name erp-assistant-backend `
         --s3-bucket bmsce-ai-erp-voice-bucket `
         --s3-key lambda_package.zip `
