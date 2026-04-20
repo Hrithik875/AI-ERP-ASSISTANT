@@ -4,7 +4,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import ChatUI, { ChatUIHandle } from "@/components/ChatUI";
-import { sendVoiceInput, mockMessages } from "@/lib/api";
+import { sendVoiceInput } from "@/lib/api";
 
 export default function VoicePage() {
   const [status, setStatus] = useState<"idle" | "listening" | "processing" | "responding">("idle");
@@ -96,7 +96,7 @@ export default function VoicePage() {
       >
         <ChatUI 
           ref={chatRef} 
-          initialMessages={mockMessages} 
+          initialMessages={[]} 
           bottomSlot={
             <div className="lg:hidden flex flex-col items-center justify-center pt-2 border-b border-border/10 pb-0">
                <VoiceRecorder

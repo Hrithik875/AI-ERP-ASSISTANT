@@ -1,57 +1,82 @@
 # ================================================================
 # AI ERP Assistant — Lambda Deployment Script (PowerShell)
 # ================================================================
-# This script packages the FastAPI backend into a zip file
-# ready for upload to AWS Lambda.
+# Packages the entire modular FastAPI backend into a zip and deploys
+# to AWS Lambda.
+#
+# Stack: Bedrock + Aurora MySQL + Qdrant + S3 + Polly + Transcribe
 #
 # Usage: .\deploy.ps1
-# Output: lambda_package.zip (upload this to Lambda)
+# Output: lambda_package.zip (uploaded to Lambda automatically)
 # ================================================================
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " AI ERP Assistant - Lambda Packager" -ForegroundColor Cyan
+Write-Host " (Bedrock + Aurora MySQL + Qdrant)" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # ── Step 1: Clean previous builds ────────────────────────────────────────
-Write-Host "[1/5] Cleaning previous build..." -ForegroundColor Yellow
+Write-Host "[1/6] Cleaning previous build..." -ForegroundColor Yellow
 if (Test-Path "package") { Remove-Item -Recurse -Force "package" }
 if (Test-Path "lambda_package.zip") { Remove-Item -Force "lambda_package.zip" }
 Write-Host "  Done." -ForegroundColor Green
 
 # ── Step 2: Create package directory ─────────────────────────────────────
-Write-Host "[2/5] Creating package directory..." -ForegroundColor Yellow
+Write-Host "[2/6] Creating package directory..." -ForegroundColor Yellow
 New-Item -ItemType Directory -Path "package" -Force | Out-Null
 Write-Host "  Done." -ForegroundColor Green
 
 # ── Step 3: Install dependencies into package directory ──────────────────
-Write-Host "[3/5] Installing dependencies..." -ForegroundColor Yellow
-Write-Host "  This may take a minute..." -ForegroundColor Gray
+Write-Host "[3/6] Installing dependencies..." -ForegroundColor Yellow
 
-# Install all dependencies into the package directory
-# --platform manylinux2014_x86_64 ensures Linux-compatible packages for Lambda
-# --only-binary :all: ensures we get pre-compiled wheels
-pip install `
-    --target ./package `
-    --platform manylinux2014_x86_64 `
-    --implementation cp `
-    --python-version 3.10 `
-    --only-binary :all: `
-    -r requirements.txt `
-    --quiet
+$dockerRunning = $false
+try {
+    $dockerInfo = docker info 2>$null
+    if ($LASTEXITCODE -eq 0) { $dockerRunning = $true }
+} catch { }
 
-# Note: boto3 is pre-installed on Lambda, but we include it for
-# local testing compatibility. Lambda will use its own version.
+if ($dockerRunning) {
+    Write-Host "  Using Docker to install packages natively for Linux..." -ForegroundColor Gray
+    docker run --rm -v "$PWD`:/var/task" python:3.10 bash -c "pip install -r /var/task/requirements.txt -t /var/task/package --quiet"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Fatal: Docker pip install failed." -ForegroundColor Red
+        exit 1
+    }
+} else {
+    Write-Host "  Docker not running. Falling back to native pip with manylinux platform..." -ForegroundColor Yellow
+    pip install -r requirements.txt -t package --platform manylinux2014_x86_64 --implementation cp --python-version 3.10 --only-binary=:all: --quiet
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Fatal: Native pip install failed. Please start Docker Desktop to build dependencies." -ForegroundColor Red
+        exit 1
+    }
+}
+
 Write-Host "  Done." -ForegroundColor Green
 
-# ── Step 4: Copy application code ────────────────────────────────────────
-Write-Host "[4/5] Copying application code..." -ForegroundColor Yellow
+# ── Step 4: Copy application code (all modules) ─────────────────────────
+Write-Host "[4/6] Copying application code..." -ForegroundColor Yellow
+
+# Copy root-level Python modules
 Copy-Item "main.py" -Destination "package/main.py" -Force
+Copy-Item "config.py" -Destination "package/config.py" -Force
+
+# Copy packages (db, ai, services, routes)
+$packages = @("db", "ai", "services", "routes")
+foreach ($pkg in $packages) {
+    if (Test-Path $pkg) {
+        $dest = "package/$pkg"
+        New-Item -ItemType Directory -Path $dest -Force | Out-Null
+        Copy-Item "$pkg/*.py" -Destination $dest -Recurse -Force
+        Write-Host "  Copied $pkg/" -ForegroundColor Gray
+    }
+}
+
 Write-Host "  Done." -ForegroundColor Green
 
 # ── Step 5: Create ZIP package ───────────────────────────────────────────
-Write-Host "[5/5] Creating lambda_package.zip..." -ForegroundColor Yellow
+Write-Host "[5/6] Creating lambda_package.zip..." -ForegroundColor Yellow
 Set-Location "package"
 Compress-Archive -Path * -DestinationPath "..\lambda_package.zip" -Force
 Set-Location ..
@@ -88,9 +113,24 @@ if ((Get-Command aws -ErrorAction SilentlyContinue) -or ($awsCmd -ne "aws")) {
 $zipSize = (Get-Item "lambda_package.zip").Length / 1MB
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host " Packaging Phase Finished!" -ForegroundColor Green
+Write-Host " Deployment Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  File: lambda_package.zip" -ForegroundColor White
 Write-Host "  Size: $([math]::Round($zipSize, 2)) MB" -ForegroundColor White
+Write-Host ""
+Write-Host "  Stack:" -ForegroundColor White
+Write-Host "    AI:      Amazon Bedrock (Claude 3 Sonnet)" -ForegroundColor Gray
+Write-Host "    Embed:   Amazon Bedrock (Titan Embeddings V2)" -ForegroundColor Gray
+Write-Host "    Database:Aurora MySQL" -ForegroundColor Gray
+Write-Host "    Vector:  Qdrant" -ForegroundColor Gray
+Write-Host "    Speech:  Amazon Transcribe + Polly" -ForegroundColor Gray
+Write-Host "    Storage: Amazon S3" -ForegroundColor Gray
+Write-Host ""
+Write-Host "  Modules included:" -ForegroundColor White
+Write-Host "    main.py, config.py" -ForegroundColor Gray
+Write-Host "    db/ (connection, models, seed)" -ForegroundColor Gray
+Write-Host "    ai/ (llm_service, embeddings, rag_pipeline, agent)" -ForegroundColor Gray
+Write-Host "    services/ (s3, transcribe, polly)" -ForegroundColor Gray
+Write-Host "    routes/ (health, voice, chat, analytics, documents, students)" -ForegroundColor Gray
 Write-Host ""

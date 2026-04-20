@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
@@ -14,7 +14,7 @@ import {
   File,
 } from "lucide-react";
 import { Card } from "@/components/Cards";
-import { mockDocuments, Document, uploadDocument } from "@/lib/api";
+import { Document, uploadDocument, fetchDocuments } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const stagger = {
@@ -45,9 +45,18 @@ const statusConfig = {
 };
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<Document[]>(mockDocuments);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch documents from backend on mount
+  useEffect(() => {
+    fetchDocuments()
+      .then((docs) => setDocuments(docs))
+      .catch((err) => console.error("Failed to fetch documents:", err))
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -55,8 +64,8 @@ export default function DocumentsPage() {
     try {
       const doc = await uploadDocument(files[0]);
       setDocuments((prev) => [doc, ...prev]);
-    } catch {
-      // handle error
+    } catch (err) {
+      console.error("Upload failed:", err);
     } finally {
       setUploading(false);
     }
@@ -138,8 +147,12 @@ export default function DocumentsPage() {
         </label>
       </motion.div>
 
-      {/* Document List */}
-      {documents.length === 0 ? (
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : documents.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
 import {
   Mic,
   BarChart3,
@@ -56,33 +57,35 @@ const quickActions = [
   },
 ];
 
-// Default static data (used when backend is unavailable)
-const defaultStats = {
-  totalQueries: "1,247",
-  totalQueriesTrend: "+12.5%",
-  avgResponse: "0.8s",
-  avgResponseTrend: "-15%",
-  activeSessions: "23",
-  activeSessionsTrend: "+3",
-  successRate: "98.2%",
-  successRateTrend: "+0.5%",
-  recentQueries: [
-    { query: "What is my attendance for CSE301?", time: "2 min ago", status: "answered" },
-    { query: "Show me last semester grades", time: "15 min ago", status: "answered" },
-    { query: "When is the next exam?", time: "1 hour ago", status: "answered" },
-    { query: "Download attendance report", time: "3 hours ago", status: "completed" },
-  ],
-};
-
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>(defaultStats);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Fetch live stats from backend on mount
   useEffect(() => {
-    fetchDashboardStats().then((data) => {
-      if (data) setStats(data);
-    });
+    fetchDashboardStats()
+      .then((data) => setStats(data))
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return (
+      <div className="p-6 lg:p-8 max-w-6xl flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="p-6 lg:p-8 max-w-6xl">
+        <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+          <h2 className="text-lg font-semibold mb-2">Unable to load dashboard</h2>
+          <p className="text-sm text-muted-foreground">Please ensure the backend is running and try again.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 max-w-6xl">
