@@ -7,12 +7,15 @@ AI-ERP-ASSISTANT/.env*.local
 
 # Python
 backend/__pycache__/
+backend/**/__pycache__/
 backend/*.py[cod]
+backend/**/*.py[cod]
 backend/*$py.class
 backend/env/
 backend/venv/
 backend/package/
 backend/lambda_package.zip
+backend/.env*
 
 # Misc
 .DS_Store
