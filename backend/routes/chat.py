@@ -11,7 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 
 from ai.agent import process_query
-from services.polly import synthesize_speech
+from providers.registry import get_tts_provider
 
 logger = logging.getLogger("erp-assistant")
 router = APIRouter(tags=["chat"])
@@ -47,7 +47,7 @@ async def chat_message(message: dict):
 
         # Optional TTS
         if include_audio:
-            tts = synthesize_speech(result["answer"])
+            tts = get_tts_provider().synthesize(result["answer"])
             response_data["audio_url"] = tts.get("audio_url")
 
         return response_data
@@ -72,7 +72,7 @@ async def text_query(payload: dict):
     # Optional TTS
     audio_url = None
     if payload.get("include_audio", False):
-        tts = synthesize_speech(result["answer"])
+        tts = get_tts_provider().synthesize(result["answer"])
         audio_url = tts.get("audio_url")
 
     return {

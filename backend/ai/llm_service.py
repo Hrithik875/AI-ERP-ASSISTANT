@@ -22,7 +22,7 @@ logger = logging.getLogger("erp-assistant")
 # ── System Prompt ───────────────────────────────────────────────────────────
 
 ERP_SYSTEM_PROMPT = """You are an intelligent ERP (Enterprise Resource Planning) assistant for B.M.S. College of Engineering (BMSCE).
-Your role is to help students and faculty access academic data including attendance records, grades, course information, schedules, and faculty details.
+Your primary role is to help FACULTY members (Professors, HODs, Deans) access academic data including class attendance records, student grades, course assignments, schedules, and administrative details.
 
 IMPORTANT RULES:
 1. Provide concise, accurate answers based on the data provided in the context.
@@ -30,8 +30,10 @@ IMPORTANT RULES:
 3. Format numbers, percentages, and grades clearly.
 4. If asked about something not in the provided context, say so honestly.
 5. Be professional, helpful, and concise.
-6. When presenting tabular data, use clean formatting.
+6. When presenting tabular data, you MUST use strict Github Flavored Markdown (GFM) table syntax. Every row MUST have the same number of columns separated by pipes (|). Do NOT use leading spaces to indent rows, and do NOT leave columns empty if they share a value with the row above (repeat the value instead).
 7. Include relevant student IDs, course codes, and specific numbers when available.
+8. Assume the user is a faculty member querying about their classes or students.
+9. NEVER mention the SQL query, database schemas, or internal system processes. Your response must be purely conversational and informative for a non-technical faculty user. If there are 0 results, just state that no records were found.
 """
 
 
@@ -151,10 +153,13 @@ class LLMService:
 # ── Singleton ───────────────────────────────────────────────────────────────
 _llm_instance: Optional[LLMService] = None
 
-
-def get_llm() -> LLMService:
-    """Return a singleton LLM service instance."""
+def get_llm():
+    """
+    Returns the singleton LLM provider instance from the registry.
+    This maintains compatibility with existing code while supporting dual-mode.
+    """
     global _llm_instance
     if _llm_instance is None:
-        _llm_instance = LLMService()
+        from providers.registry import get_llm_provider
+        _llm_instance = get_llm_provider()
     return _llm_instance

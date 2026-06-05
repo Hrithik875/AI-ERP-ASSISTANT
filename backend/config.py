@@ -4,7 +4,11 @@ AI ERP Assistant — Configuration Module
 Centralized configuration loaded from environment variables.
 All secrets and service parameters live here.
 
-Architecture (per workflow):
+Supports dual runtime modes:
+  APP_MODE=aws   → Full AWS stack (production)
+  APP_MODE=local → Fully offline local stack (demo/dev)
+
+Architecture — AWS Mode:
   - AI:        Amazon Bedrock (Claude 3 Sonnet) + Titan Embeddings
   - Database:  Amazon Aurora MySQL
   - Vector DB: Qdrant
@@ -13,6 +17,14 @@ Architecture (per workflow):
   - Backend:   AWS Lambda (via Mangum)
   - CDN:       CloudFront
   - Monitoring: CloudWatch
+
+Architecture — Local Mode:
+  - AI:        Ollama (local LLM + embeddings)
+  - Database:  Local MySQL (same driver)
+  - Vector DB: Qdrant (local)
+  - Speech:    faster-whisper (STT) + edge-tts (TTS)
+  - Storage:   Local filesystem
+  - Backend:   Uvicorn (local)
 """
 
 import os
@@ -28,6 +40,25 @@ _handler.setFormatter(logging.Formatter(
 ))
 if not logger.handlers:
     logger.addHandler(_handler)
+
+try:
+    from dotenv import load_dotenv
+    if os.path.exists(".env.local"):
+        load_dotenv(".env.local")
+except ImportError:
+    pass
+
+# ── Runtime Mode ────────────────────────────────────────────────────────────
+APP_MODE = os.environ.get("APP_MODE", "aws")  # "aws" or "local"
+
+
+# ── Local Mode Settings ─────────────────────────────────────────────────────
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+
+LOCAL_STORAGE_DIR = os.environ.get("LOCAL_STORAGE_DIR", "./local_storage")
+LOCAL_SERVER_URL = os.environ.get("LOCAL_SERVER_URL", "http://localhost:8000")
 
 
 # ── AWS ─────────────────────────────────────────────────────────────────────

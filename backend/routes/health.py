@@ -6,7 +6,8 @@ AI ERP Assistant — Health Route
 from datetime import datetime
 from fastapi import APIRouter
 
-from config import AWS_REGION, S3_BUCKET_NAME, BEDROCK_MODEL_ID, BEDROCK_EMBEDDING_MODEL_ID
+from config import APP_MODE, AWS_REGION, S3_BUCKET_NAME, BEDROCK_MODEL_ID, BEDROCK_EMBEDDING_MODEL_ID
+from providers.registry import get_llm_provider, get_embedding_provider
 
 router = APIRouter(tags=["health"])
 
@@ -14,15 +15,15 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 def health_check():
     """Health check endpoint."""
+    llm = get_llm_provider()
+    embedding = get_embedding_provider()
+    
     return {
         "status": "healthy",
         "message": "AI ERP Assistant API running",
-        "service": "AI ERP Assistant API",
-        "region": AWS_REGION,
-        "bucket": S3_BUCKET_NAME,
-        "llm_provider": "amazon-bedrock",
-        "llm_model": BEDROCK_MODEL_ID,
-        "embedding_model": BEDROCK_EMBEDDING_MODEL_ID,
+        "mode": APP_MODE,
+        "llm_provider": type(llm).__name__,
+        "embedding_provider": type(embedding).__name__,
         "database": "aurora-mysql",
         "vector_db": "qdrant",
         "timestamp": datetime.utcnow().isoformat(),

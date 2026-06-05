@@ -76,12 +76,16 @@ class EmbeddingService:
 
 
 # ── Singleton ───────────────────────────────────────────────────────────────
-_embed_instance: Optional[EmbeddingService] = None
+_embedding_instance = None
 
 
-def get_embedding_service() -> EmbeddingService:
-    """Return singleton embedding service."""
-    global _embed_instance
-    if _embed_instance is None:
-        _embed_instance = EmbeddingService()
-    return _embed_instance
+def get_embedding_service():
+    """
+    Returns the singleton embedding provider instance from the registry.
+    This maintains compatibility with existing code while supporting dual-mode.
+    """
+    global _embedding_instance
+    if _embedding_instance is None:
+        from providers.registry import get_embedding_provider
+        _embedding_instance = get_embedding_provider()
+    return _embedding_instance

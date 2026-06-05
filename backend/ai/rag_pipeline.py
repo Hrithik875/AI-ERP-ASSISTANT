@@ -30,8 +30,8 @@ class RAGPipeline:
     def __init__(self):
         self._qdrant_client = None
         self._embedding_service = None
-        self._s3_client = None
-        logger.info("RAGPipeline initialized (Bedrock Titan + Qdrant)")
+        self._storage_provider = None
+        logger.info("RAGPipeline initialized")
 
     @property
     def qdrant(self):
@@ -49,11 +49,11 @@ class RAGPipeline:
         return self._embedding_service
 
     @property
-    def s3(self):
-        if self._s3_client is None:
-            import boto3
-            self._s3_client = boto3.client("s3", region_name=AWS_REGION)
-        return self._s3_client
+    def storage(self):
+        if self._storage_provider is None:
+            from providers.registry import get_storage_provider
+            self._storage_provider = get_storage_provider()
+        return self._storage_provider
 
     def _ensure_collection(self):
         """Create Qdrant collection if it doesn't exist."""
@@ -86,13 +86,12 @@ class RAGPipeline:
             start += RAG_CHUNK_SIZE - RAG_CHUNK_OVERLAP
         return chunks
 
-    def extract_text_from_s3(self, s3_key: str) -> str:
-        """Download a document from S3 and extract text."""
+    def extract_text_from_storage(self, storage_key: str) -> str:
+        """Download a document from storage and extract text."""
         try:
-            response = self.s3.get_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
-            content = response["Body"].read()
+            content = self.storage.download_bytes(storage_key)
 
-            ext = s3_key.rsplit(".", 1)[-1].lower()
+            ext = storage_key.rsplit(".", 1)[-1].lower()
 
             if ext == "txt":
                 return content.decode("utf-8", errors="ignore")
@@ -112,7 +111,7 @@ class RAGPipeline:
                     return "\n\n".join(pages)
                 except ImportError:
                     logger.warning("PyPDF2 not installed; cannot extract PDF text")
-                    return f"[PDF document: {s3_key}]"
+                    return f"[PDF document: {storage_key}]"
 
             elif ext in ("doc", "docx"):
                 try:
@@ -121,7 +120,7 @@ class RAGPipeline:
                     return "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
                 except ImportError:
                     logger.warning("python-docx not installed; cannot extract DOCX text")
-                    return f"[DOCX document: {s3_key}]"
+                    return f"[DOCX document: {storage_key}]"
 
             elif ext == "xlsx":
                 try:
@@ -136,30 +135,30 @@ class RAGPipeline:
                     return "\n".join(rows)
                 except ImportError:
                     logger.warning("openpyxl not installed; cannot extract XLSX text")
-                    return f"[XLSX document: {s3_key}]"
+                    return f"[XLSX document: {storage_key}]"
 
             else:
                 return content.decode("utf-8", errors="ignore")
 
         except Exception as e:
-            logger.error(f"Failed to extract text from S3 key={s3_key}: {e}")
+            logger.error(f"Failed to extract text from storage key={storage_key}: {e}")
             raise
 
-    def ingest_document(self, s3_key: str, doc_id: str, filename: str) -> int:
+    def ingest_document(self, storage_key: str, doc_id: str, filename: str) -> int:
         """
         Full ingestion pipeline:
-          1. Download from S3
+          1. Download from storage
           2. Extract text
           3. Chunk
-          4. Embed via Bedrock Titan
+          4. Embed via provider
           5. Store in Qdrant
         Returns number of chunks stored.
         """
-        logger.info(f"Ingesting document: {filename} (s3_key={s3_key})")
+        logger.info(f"Ingesting document: {filename} (key={storage_key})")
 
-        text = self.extract_text_from_s3(s3_key)
+        text = self.extract_text_from_storage(storage_key)
         if not text.strip():
-            logger.warning(f"No text extracted from {s3_key}")
+            logger.warning(f"No text extracted from {storage_key}")
             return 0
 
         chunks = self.chunk_text(text)
@@ -181,7 +180,7 @@ class RAGPipeline:
                     payload={
                         "doc_id": doc_id,
                         "filename": filename,
-                        "s3_key": s3_key,
+                        "storage_key": storage_key,
                         "chunk_index": i,
                         "text": chunk,
                     },

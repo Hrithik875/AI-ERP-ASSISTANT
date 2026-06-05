@@ -10,11 +10,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, File, UploadFile, HTTPException
 
-from services.s3 import upload_bytes
-from services.transcribe import start_transcription, get_transcription_status
-from services.polly import synthesize_speech
 from ai.agent import process_query
-from config import S3_BUCKET_NAME
+from providers.registry import get_storage_provider, get_stt_provider, get_tts_provider
 
 logger = logging.getLogger("erp-assistant")
 router = APIRouter(tags=["voice"])
@@ -50,7 +47,7 @@ async def voice_input(audio: UploadFile = File(...)):
         if len(file_content) == 0:
             raise HTTPException(status_code=400, detail="Empty audio file")
 
-        upload_bytes(s3_key, file_content, content_type)
+        get_storage_provider().upload_bytes(s3_key, file_content, content_type)
 
     except HTTPException:
         raise
@@ -60,7 +57,7 @@ async def voice_input(audio: UploadFile = File(...)):
 
     job_name = f"erp-voice-{file_id}"
     try:
-        start_transcription(job_name, s3_key, media_format=extension)
+        get_stt_provider().transcribe_async(file_content, audio_format=extension, job_name=job_name)
     except Exception as e:
         logger.error(f"Transcribe start failed: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start transcription: {str(e)}")
@@ -82,7 +79,7 @@ def get_transcript(job_name: str):
     logger.info(f"Transcript status check: {job_name}")
 
     try:
-        result = get_transcription_status(job_name)
+        result = get_stt_provider().get_transcription_status(job_name)
         return result
     except Exception as e:
         logger.error(f"Transcript check failed: {e}")
@@ -113,18 +110,18 @@ async def voice_query(audio: UploadFile = File(...)):
     if len(file_content) == 0:
         raise HTTPException(status_code=400, detail="Empty audio file")
 
-    upload_bytes(s3_key, file_content, content_type)
+    get_storage_provider().upload_bytes(s3_key, file_content, content_type)
 
     # Step 2: Start transcription
     job_name = f"erp-voice-{file_id}"
-    start_transcription(job_name, s3_key, media_format=ext)
+    get_stt_provider().transcribe_async(file_content, audio_format=ext, job_name=job_name)
 
     # Step 3: Poll for completion (max 60s)
     import time
     transcript_text = None
     for _ in range(30):
         time.sleep(2)
-        result = get_transcription_status(job_name)
+        result = get_stt_provider().get_transcription_status(job_name)
         if result["status"] == "COMPLETED":
             transcript_text = result.get("transcript", "")
             break
@@ -138,7 +135,7 @@ async def voice_query(audio: UploadFile = File(...)):
     ai_result = process_query(transcript_text)
 
     # Step 5: Generate TTS
-    tts_result = synthesize_speech(ai_result["answer"])
+    tts_result = get_tts_provider().synthesize(ai_result["answer"])
 
     return {
         "transcript": transcript_text,

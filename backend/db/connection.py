@@ -48,6 +48,11 @@ def get_connection() -> pymysql.connections.Connection:
                 read_timeout=30,
                 write_timeout=30,
             )
+            # Disable strict group-by mode to help local LLMs with slightly malformed SQL
+            with _connection.cursor() as cur:
+                cur.execute("SET sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));")
+            _connection.commit()
+            
             logger.info(f"MySQL connection established: {AURORA_HOST}:{AURORA_PORT}/{AURORA_DATABASE}")
             _last_connection_failure = 0 # Reset on success
         except pymysql.err.OperationalError as e:

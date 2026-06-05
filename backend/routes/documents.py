@@ -11,7 +11,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, File, UploadFile, HTTPException
 
-from services.s3 import upload_bytes
+from providers.registry import get_storage_provider
 from db.connection import execute_query, execute_insert_returning, execute_write
 
 logger = logging.getLogger("erp-assistant")
@@ -44,14 +44,14 @@ async def upload_document(file: UploadFile = File(...)):
         if file_size == 0:
             raise HTTPException(status_code=400, detail="Empty file")
 
-        # Upload to S3
-        upload_bytes(s3_key, file_content, file.content_type or "application/octet-stream")
+        # Upload to Storage
+        get_storage_provider().upload_bytes(s3_key, file_content, file.content_type or "application/octet-stream")
 
         # Save metadata in Aurora MySQL
         try:
             execute_write(
                 """INSERT IGNORE INTO documents
-                   (doc_id, filename, file_type, file_size_bytes, s3_key, status)
+                   (doc_uuid, filename, file_type, file_size_bytes, storage_path, embedding_status)
                    VALUES (%s, %s, %s, %s, %s, 'processing')""",
                 (doc_id, file.filename, file_ext.upper(), file_size, s3_key),
             )
@@ -65,14 +65,14 @@ async def upload_document(file: UploadFile = File(...)):
             chunk_count = rag.ingest_document(s3_key, doc_id, file.filename)
 
             execute_write(
-                "UPDATE documents SET status = 'processed', chunk_count = %s WHERE doc_id = %s",
+                "UPDATE documents SET embedding_status = 'processed', chunk_count = %s WHERE doc_uuid = %s",
                 (chunk_count, doc_id),
             )
         except Exception as rag_err:
             logger.warning(f"RAG ingestion failed (doc saved to S3): {rag_err}")
             try:
                 execute_write(
-                    "UPDATE documents SET status = 'failed' WHERE doc_id = %s",
+                    "UPDATE documents SET embedding_status = 'failed' WHERE doc_uuid = %s",
                     (doc_id,),
                 )
             except Exception:
@@ -106,12 +106,12 @@ def list_documents():
     """List all uploaded documents from Aurora MySQL."""
     try:
         docs = execute_query("""
-            SELECT doc_id AS id, filename AS name, file_type AS type,
-                   file_size_bytes, s3_key, status,
-                   DATE_FORMAT(uploaded_at, '%Y-%m-%d') AS uploadedAt,
+            SELECT doc_uuid AS id, filename AS name, file_type AS type,
+                   file_size_bytes, storage_path AS s3_key, embedding_status AS status,
+                   DATE_FORMAT(created_at, '%Y-%m-%d') AS uploadedAt,
                    chunk_count
             FROM documents
-            ORDER BY uploaded_at DESC
+            ORDER BY created_at DESC
             LIMIT 50
         """)
 

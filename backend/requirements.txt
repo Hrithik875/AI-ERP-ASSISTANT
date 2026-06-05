@@ -4,12 +4,21 @@
 # ── Core ─────────────────────────────────────────────────────────────────────
 fastapi>=0.109.0
 pydantic>=2.6.0
-mangum
-boto3
 python-multipart
 uvicorn
 
-# ── Database (Aurora MySQL) ───────────────────────────────────────────────────
+# ── AWS Stack Dependencies (APP_MODE=aws) ────────────────────────────────────
+boto3
+mangum
+
+# ── Local Stack Dependencies (APP_MODE=local) ────────────────────────────────
+# Install Ollama separately from https://ollama.com
+requests
+faster-whisper
+edge-tts
+python-dotenv
+
+# ── Database (Aurora MySQL / Local MySQL) ────────────────────────────────────
 PyMySQL
 cryptography
 
