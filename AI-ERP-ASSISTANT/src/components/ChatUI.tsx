@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef, FormEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Bot, User, Loader2 } from "lucide-react";
+import { Send, Bot, User, Loader2, Trash2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { ChatMessage, sendChatMessage } from "@/lib/api";
 
@@ -71,6 +73,11 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
     },
   }));
 
+  const handleClearChat = () => {
+    setMessages([]);
+    localStorage.removeItem("erp_chat_history");
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -110,7 +117,7 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto min-h-0 px-4 py-6 space-y-4"
+        className="flex-1 overflow-y-auto min-h-0 px-4 py-6 space-y-4 touch-pan-y"
       >
         {messages.length === 0 && (
           <motion.div
@@ -147,13 +154,44 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
               )}
               <div
                 className={cn(
-                  "max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words overflow-hidden",
                   msg.role === "user"
                     ? "bg-foreground text-background rounded-br-md"
                     : "bg-card border border-border rounded-bl-md"
                 )}
               >
-                <p className="whitespace-pre-wrap">{msg.content}</p>
+                {msg.role === "user" ? (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                ) : (
+                  <div className="markdown-content space-y-2">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        table: ({node, ...props}) => (
+                          <div className="overflow-x-auto my-3 w-full rounded-md border border-border">
+                            <table className="w-full text-sm text-left border-collapse" {...props} />
+                          </div>
+                        ),
+                        thead: ({node, ...props}) => <thead className="text-xs uppercase bg-accent/50 text-muted-foreground border-b border-border" {...props} />,
+                        th: ({node, ...props}) => <th className="px-4 py-2 border-r border-border last:border-r-0 font-semibold whitespace-nowrap" {...props} />,
+                        tbody: ({node, ...props}) => <tbody className="divide-y divide-border" {...props} />,
+                        tr: ({node, ...props}) => <tr className="hover:bg-accent/10 transition-colors" {...props} />,
+                        td: ({node, ...props}) => <td className="px-4 py-2 border-r border-border last:border-r-0 whitespace-nowrap" {...props} />,
+                        p: ({node, ...props}) => <p className="mb-2 last:mb-0 whitespace-pre-wrap" {...props} />,
+                        strong: ({node, ...props}) => <strong className="font-bold text-foreground" {...props} />,
+                        ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-2 space-y-1" {...props} />,
+                        ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-2 space-y-1" {...props} />,
+                        li: ({node, ...props}) => <li {...props} />,
+                        a: ({node, ...props}) => <a className="text-primary hover:underline underline-offset-4" {...props} />,
+                        code: ({node, ...props}) => (
+                          <code className="bg-accent/50 text-foreground px-1.5 py-0.5 rounded text-[13px] font-mono border border-border/50" {...props} />
+                        )
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                )}
                 <p
                   suppressHydrationWarning
                   className={cn(
@@ -217,6 +255,14 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
         {bottomSlot}
         <div className="p-4 pt-2">
           <form onSubmit={handleSubmit} className="flex items-center gap-3" suppressHydrationWarning>
+            <button
+              type="button"
+              onClick={handleClearChat}
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
+              title="Clear Chat"
+            >
+              <Trash2 className="h-5 w-5" />
+            </button>
             <input
               suppressHydrationWarning
               ref={inputRef}

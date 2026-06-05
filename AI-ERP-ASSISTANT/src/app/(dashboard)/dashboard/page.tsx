@@ -132,7 +132,7 @@ export default function DashboardPage() {
         />
         <StatCard
           icon={<Users className="h-5 w-5" />}
-          label="Active Sessions"
+          label="Total Students"
           value={stats.activeSessions}
           trend={stats.activeSessionsTrend}
           trendUp={true}
@@ -140,8 +140,8 @@ export default function DashboardPage() {
         />
         <StatCard
           icon={<TrendingUp className="h-5 w-5" />}
-          label="Success Rate"
-          value={stats.successRate}
+          label="Total Faculty"
+          value={stats.totalFaculty}
           trend={stats.successRateTrend}
           trendUp={true}
           delay={0.24}
@@ -206,8 +206,8 @@ export default function DashboardPage() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent">
                     <BookOpen className="h-4 w-4 text-muted-foreground" />
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">{item.query}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate max-w-[200px] sm:max-w-[300px] lg:max-w-[400px]">{item.query}</p>
                     <p className="text-xs text-muted-foreground">{item.time}</p>
                   </div>
                 </div>

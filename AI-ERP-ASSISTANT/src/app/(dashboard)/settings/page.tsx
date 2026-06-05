@@ -88,11 +88,11 @@ export default function SettingsPage() {
           </h2>
           <div className="flex items-start gap-5 mb-6">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-foreground text-background text-xl font-bold shrink-0">
-              H
+              R
             </div>
             <div>
-              <h3 className="text-lg font-semibold">Hrithik M</h3>
-              <p className="text-sm text-muted-foreground">Student • CSE</p>
+              <h3 className="text-lg font-semibold">Dr. Raghav Sharma</h3>
+              <p className="text-sm text-muted-foreground">Professor • CSE</p>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -104,9 +104,9 @@ export default function SettingsPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { icon: Mail, label: "Email", value: "hrithik@university.edu" },
+              { icon: Mail, label: "Email", value: "raghav.sharma@university.edu" },
               { icon: Building, label: "Department", value: "Computer Science" },
-              { icon: User, label: "Student ID", value: "CS2024001" },
+              { icon: User, label: "Employee ID", value: "FAC001" },
               { icon: Globe, label: "Language", value: "English" },
             ].map((item, i) => (
               <div

@@ -186,38 +186,88 @@ export default function AnalyticsPage() {
             </div>
           </Card>
 
-          {/* Usage by Category */}
-          <Card delay={0.16} hover={false}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent">
-                <Activity className="h-4 w-4" />
+            {/* Usage by Category */}
+            <Card delay={0.16} hover={false}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent">
+                  <Activity className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Usage by Category</h3>
+                  <p className="text-xs text-muted-foreground">Query distribution</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold">Usage by Category</h3>
-                <p className="text-xs text-muted-foreground">Query distribution</p>
+              <div className="h-[240px] flex items-center">
+                <div className="w-1/2 h-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={data.usageStats}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {data.usageStats.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={CHART_COLORS[index % CHART_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "12px",
+                          fontSize: "12px",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-1/2 space-y-2.5 pl-2">
+                  {data.usageStats.map((stat, i) => (
+                    <div key={i} className="flex items-center gap-2.5">
+                      <div
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground flex-1">
+                        {stat.name}
+                      </span>
+                      <span className="text-xs font-medium tabular-nums">
+                        {stat.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="h-[240px] flex items-center">
-              <div className="w-1/2 h-full">
+            </Card>
+
+            {/* Department Stats */}
+            <Card delay={0.24} hover={false} className="lg:col-span-2">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent">
+                  <BarChart3 className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Department Student Distribution</h3>
+                  <p className="text-xs text-muted-foreground">Total Students per Department</p>
+                </div>
+              </div>
+              <div className="h-[240px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={data.usageStats}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={80}
-                      paddingAngle={3}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {data.usageStats.map((_, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={CHART_COLORS[index % CHART_COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
+                  <BarChart data={data.deptStats} layout="vertical" margin={{ top: 0, right: 0, left: 20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
+                    <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "var(--muted-foreground)", fontSize: 12 }} />
                     <Tooltip
                       contentStyle={{
                         background: "var(--card)",
@@ -226,30 +276,13 @@ export default function AnalyticsPage() {
                         fontSize: "12px",
                         boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
                       }}
+                      cursor={{ fill: "var(--accent)", opacity: 0.5 }}
                     />
-                  </PieChart>
+                    <Bar dataKey="value" fill="var(--foreground)" radius={[0, 6, 6, 0]} opacity={0.85} barSize={20} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="w-1/2 space-y-2.5 pl-2">
-                {data.usageStats.map((stat, i) => (
-                  <div key={i} className="flex items-center gap-2.5">
-                    <div
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{
-                        backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
-                      }}
-                    />
-                    <span className="text-xs text-muted-foreground flex-1">
-                      {stat.name}
-                    </span>
-                    <span className="text-xs font-medium tabular-nums">
-                      {stat.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Card>
+            </Card>
         </div>
       )}
     </div>

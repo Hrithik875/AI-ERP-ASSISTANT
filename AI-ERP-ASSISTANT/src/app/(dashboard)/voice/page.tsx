@@ -69,9 +69,9 @@ export default function VoicePage() {
           </p>
           <div className="space-y-2">
             {[
-              "What's my attendance?",
-              "Show me last semester grades",
-              "When is the next exam?",
+              "What's the attendance for CS601?",
+              "List all students in section A",
+              "Show me grades for Machine Learning",
             ].map((tip, i) => (
               <motion.div
                 key={i}

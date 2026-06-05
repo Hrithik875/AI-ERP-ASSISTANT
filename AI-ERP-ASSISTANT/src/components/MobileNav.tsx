@@ -9,15 +9,16 @@ import {
   FileText,
   BarChart3,
   Settings,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/database", label: "Database", icon: Database },
   { href: "/voice", label: "Voice", icon: Mic, primary: true },
   { href: "/documents", label: "Docs", icon: FileText },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export default function MobileNav() {

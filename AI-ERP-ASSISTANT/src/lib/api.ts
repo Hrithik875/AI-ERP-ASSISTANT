@@ -22,6 +22,7 @@ export interface AnalyticsData {
   queriesPerDay: { date: string; count: number }[];
   usageStats: { name: string; value: number }[];
   responseTimes: { date: string; avgMs: number }[];
+  deptStats: { name: string; value: number }[];
 }
 
 export interface Document {
@@ -42,6 +43,8 @@ export interface DashboardStats {
   activeSessionsTrend: string;
   successRate: string;
   successRateTrend: string;
+  totalFaculty: string;
+  totalCourses: string;
   recentQueries: {
     query: string;
     time: string;
@@ -71,7 +74,7 @@ interface TranscriptResponse {
 async function pollTranscript(
   jobName: string,
   intervalMs: number = 2000,
-  timeoutMs: number = 60000
+  timeoutMs: number = 180000
 ): Promise<string> {
   const startTime = Date.now();
 
@@ -296,4 +299,180 @@ export async function checkHealth(): Promise<{
     console.error("Health check error:", error);
     return null;
   }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Database Console API
+// ══════════════════════════════════════════════════════════════════════════════
+
+export interface TableInfo {
+  name: string;
+  rowCount: number;
+  columns: {
+    COLUMN_NAME: string;
+    DATA_TYPE: string;
+    IS_NULLABLE: string;
+    COLUMN_KEY: string;
+    COLUMN_DEFAULT: string | null;
+    EXTRA: string;
+  }[];
+}
+
+export interface TableData {
+  table: string;
+  columns: string[];
+  columnDetails: {
+    COLUMN_NAME: string;
+    DATA_TYPE: string;
+    IS_NULLABLE: string;
+    COLUMN_KEY: string;
+  }[];
+  rows: Record<string, unknown>[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface SqlResult {
+  type: "select" | "write";
+  rows?: Record<string, unknown>[];
+  rowCount?: number;
+  columns?: string[];
+  affectedRows?: number;
+  message?: string;
+}
+
+/**
+ * Fetch all tables with their column info and row counts.
+ */
+export async function fetchTables(): Promise<TableInfo[]> {
+  const res = await fetch(`${API_BASE}/db/tables`);
+  if (!res.ok) throw new Error(`Failed to fetch tables: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch paginated data from a specific table.
+ */
+export async function fetchTableData(
+  tableName: string,
+  options: {
+    page?: number;
+    pageSize?: number;
+    sortBy?: string;
+    sortOrder?: "ASC" | "DESC";
+    search?: string;
+  } = {}
+): Promise<TableData> {
+  const params = new URLSearchParams();
+  if (options.page) params.set("page", String(options.page));
+  if (options.pageSize) params.set("page_size", String(options.pageSize));
+  if (options.sortBy) params.set("sort_by", options.sortBy);
+  if (options.sortOrder) params.set("sort_order", options.sortOrder);
+  if (options.search) params.set("search", options.search);
+
+  const res = await fetch(`${API_BASE}/db/tables/${tableName}?${params}`);
+  if (!res.ok) throw new Error(`Failed to fetch table data: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Insert a row into a table.
+ */
+export async function insertTableRow(
+  tableName: string,
+  data: Record<string, unknown>
+): Promise<{ success: boolean; id: number; message: string }> {
+  const res = await fetch(`${API_BASE}/db/tables/${tableName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Insert failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Update a row in a table.
+ */
+export async function updateTableRow(
+  tableName: string,
+  rowId: number,
+  data: Record<string, unknown>
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/db/tables/${tableName}/${rowId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ data }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Update failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Delete a row from a table.
+ */
+export async function deleteTableRow(
+  tableName: string,
+  rowId: number
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/db/tables/${tableName}/${rowId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Delete failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Execute raw SQL query.
+ */
+export async function executeSql(sql: string): Promise<SqlResult> {
+  const res = await fetch(`${API_BASE}/db/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `SQL execution failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
+ * Export table data as CSV or JSON.
+ */
+export function getExportUrl(tableName: string, format: "csv" | "json"): string {
+  return `${API_BASE}/db/export/${tableName}?format=${format}`;
+}
+
+/**
+ * Import data into a table from a file.
+ */
+export async function importTableData(
+  tableName: string,
+  file: File
+): Promise<{ success: boolean; imported: number; message: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/db/import/${tableName}`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Import failed: ${res.status}`);
+  }
+  return res.json();
 }

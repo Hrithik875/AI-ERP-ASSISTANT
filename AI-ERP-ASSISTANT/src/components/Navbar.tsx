@@ -19,8 +19,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const navLinks = [
-  { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/database", label: "Database", icon: LayoutDashboard },
   { href: "/voice", label: "Assistant", icon: Mic },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
