@@ -26,7 +26,7 @@ export default function VoicePage() {
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row w-full overflow-hidden relative">
+    <div className="flex flex-col lg:flex-row w-full h-[calc(100dvh-9rem)] lg:h-[calc(100vh-4rem)] overflow-hidden relative">
       {/* Mobile-only Header */}
       <div className="lg:hidden shrink-0 border-b border-border p-4 bg-card/30 flex items-center justify-between z-10">
         <div>
