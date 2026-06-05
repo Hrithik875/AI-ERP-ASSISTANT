@@ -10,12 +10,12 @@ from .base import BaseTool
 
 class CourseTool(BaseTool):
     name = "CourseTool"
-    description = "Fetches course details and enrollment statistics."
+    description = "Search/list all courses, or fetch specific course details and statistics."
     
     parameters = {
-        "action": "One of: 'details', 'statistics', 'search'",
-        "course_code": "Course Code (optional)",
-        "department": "Department Name (optional)"
+        "action": "One of: 'search' (to list all courses), 'details' (requires course_code), 'statistics' (requires course_code)",
+        "course_code": "Course Code (required for details/statistics, e.g. CS101)",
+        "department": "Department Name (optional filter for search)"
     }
 
     def execute(self, params: Dict[str, Any]) -> Any:
