@@ -61,11 +61,26 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch live stats from backend on mount
+  // Fetch live stats from backend on mount and poll
   useEffect(() => {
-    fetchDashboardStats()
-      .then((data) => setStats(data))
-      .finally(() => setLoading(false));
+    let mounted = true;
+    const fetchStats = () => {
+      fetchDashboardStats()
+        .then((data) => {
+          if (mounted) setStats(data);
+        })
+        .finally(() => {
+          if (mounted) setLoading(false);
+        });
+    };
+    
+    fetchStats();
+    const intervalId = setInterval(fetchStats, 10000);
+    
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   if (loading) {
