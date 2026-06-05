@@ -12,7 +12,7 @@ export default function DashboardLayout({
       <Navbar />
       <div className="flex pt-16">
         <Sidebar />
-        <main className="flex-1 min-h-[calc(100vh-4rem)] pb-20 lg:pb-0">
+        <main className="flex-1 flex flex-col min-h-[calc(100vh-4rem)] pb-20 lg:pb-0 w-full max-w-full">
           {children}
         </main>
       </div>

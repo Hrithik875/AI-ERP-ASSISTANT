@@ -117,7 +117,7 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
       {/* Messages */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto min-h-0 px-4 py-6 space-y-4 touch-pan-y"
+        className="flex-1 overflow-y-auto min-h-0 px-4 py-6 space-y-4 overscroll-contain"
       >
         {messages.length === 0 && (
           <motion.div
