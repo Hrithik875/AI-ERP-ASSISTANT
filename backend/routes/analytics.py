@@ -140,11 +140,11 @@ def get_dashboard_stats():
             SELECT
                 query_text AS query,
                 CASE
-                    WHEN created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN 'Just now'
-                    WHEN created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR) THEN
-                        CONCAT(TIMESTAMPDIFF(MINUTE, created_at, NOW()), ' min ago')
+                    WHEN ABS(TIMESTAMPDIFF(MINUTE, NOW(), created_at)) <= 5 THEN 'Just now'
+                    WHEN ABS(TIMESTAMPDIFF(MINUTE, NOW(), created_at)) < 60 THEN
+                        CONCAT(ABS(TIMESTAMPDIFF(MINUTE, NOW(), created_at)), ' min ago')
                     ELSE
-                        CONCAT(TIMESTAMPDIFF(HOUR, created_at, NOW()), ' hours ago')
+                        CONCAT(ABS(TIMESTAMPDIFF(HOUR, NOW(), created_at)), ' hours ago')
                 END AS time,
                 status
             FROM query_logs

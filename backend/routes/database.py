@@ -11,7 +11,7 @@ import csv
 import io
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -58,8 +58,7 @@ def _serialize_value(val):
         return f"{h:02d}:{m:02d}:{s:02d}"
     return val
 
-# Need timedelta import
-from datetime import timedelta
+
 
 def _serialize_rows(rows):
     """Serialize a list of dict rows so all values are JSON-safe."""

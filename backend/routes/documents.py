@@ -117,7 +117,7 @@ def list_documents():
 
         # Format sizes
         for doc in docs:
-            size = doc.pop("file_size_bytes", 0)
+            size = doc.pop("file_size_bytes", 0) or 0
             if size >= 1024 * 1024:
                 doc["size"] = f"{size / (1024 * 1024):.1f} MB"
             else:
