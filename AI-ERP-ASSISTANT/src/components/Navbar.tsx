@@ -15,12 +15,15 @@ import {
   Sparkles,
   Menu,
   X,
+  Home,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
+  { href: "/", label: "Home", icon: Home },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/database", label: "Database", icon: LayoutDashboard },
+  { href: "/database", label: "Database", icon: Database },
   { href: "/voice", label: "Assistant", icon: Mic },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
@@ -71,7 +74,7 @@ export default function Navbar() {
           },
           pill: {
             width: "100%",
-            maxWidth: "560px",
+            maxWidth: "720px",
             height: "56px",
             borderRadius: "999px",
             y: 10,
@@ -81,7 +84,7 @@ export default function Navbar() {
           },
           hidden: {
             width: "100%",
-            maxWidth: "560px",
+            maxWidth: "720px",
             height: "56px",
             borderRadius: "999px",
             y: -50,

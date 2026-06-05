@@ -13,10 +13,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const sidebarLinks = [
+  { href: "/", label: "Home", icon: Home },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/voice", label: "Voice Assistant", icon: Mic },
   { href: "/database", label: "Database", icon: Database },
