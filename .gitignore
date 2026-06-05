@@ -20,3 +20,7 @@ backend/.env*
 # Misc
 .DS_Store
 *.log
+
+# Local Dev and Artifacts
+backend/local_storage/
+implementation_plan*
