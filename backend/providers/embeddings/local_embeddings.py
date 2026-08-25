@@ -31,7 +31,7 @@ class OllamaEmbeddingProvider(BaseEmbeddingProvider):
                 logger.info(f"Detected Ollama embedding dimension: {self._dimension}")
             except Exception as e:
                 logger.error(f"Failed to detect embedding dimension: {e}")
-                self._dimension = 768  # fallback default for nomic-embed-text
+                self._dimension = 1024  # fallback default for mxbai-embed-large
         return self._dimension
 
     def embed(self, text: str) -> List[float]:
