@@ -18,7 +18,7 @@ logger = logging.getLogger("erp-assistant")
 class LocalSTTProvider(BaseSTTProvider):
     def __init__(self):
         self._model = None
-        self.model_size = os.environ.get("WHISPER_MODEL", "tiny.en")
+        self.model_size = os.environ.get("WHISPER_MODEL", "small.en")
         logger.info(f"Local STT Provider initialized (faster-whisper, model={self.model_size})")
         # In-memory store for async jobs simulation
         self._jobs = {}
