@@ -66,6 +66,9 @@ class _StubLLM:
         yield "LLM "
         yield "response: query processed successfully."
 
+    def prewarm(self):
+        return {self.fast_model: 0, self.model_id: 0}
+
     def health_check(self):
         return {"status": "ok", "provider": "stub", "model": self.model_id, "fast_model": self.fast_model}
 

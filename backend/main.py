@@ -73,6 +73,19 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Storage init failed (non-fatal): {e}")
 
+    # Pre-warm local Ollama models on startup
+    if APP_MODE == "local":
+        try:
+            from providers.registry import get_llm_provider
+            llm = get_llm_provider()
+            if hasattr(llm, "prewarm"):
+                logger.info("Pre-warming Ollama models on backend startup...")
+                timings = llm.prewarm()
+                total_prewarm = sum(timings.values())
+                logger.info(f"Ollama models pre-warmed in {total_prewarm}ms total ({timings})")
+        except Exception as e:
+            logger.warning(f"Ollama model pre-warming failed (non-fatal): {e}")
+
     yield  # Application runs here
 
     # ── Shutdown ─────────────────────────────────────────────────────────

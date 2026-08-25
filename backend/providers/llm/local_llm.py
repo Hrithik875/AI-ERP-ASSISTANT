@@ -47,6 +47,7 @@ class OllamaLLMProvider(BaseLLMProvider):
     def _call(self, model: str, system: str, user: str, temperature: float) -> str:
         """POST to Ollama /api/chat (non-streaming). Returns the response content string."""
         start = time.perf_counter()
+        logger.info(f"Ollama HTTP request dispatch -> model='{model}'")
         response = requests.post(
             f"{self.base_url}/api/chat",
             json={
@@ -64,7 +65,7 @@ class OllamaLLMProvider(BaseLLMProvider):
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         answer = response.json().get("message", {}).get("content", "").strip()
         logger.info(
-            f"Ollama [{model}] response in {elapsed_ms}ms ({len(answer)} chars)"
+            f"Ollama [{model}] response generated in {elapsed_ms}ms ({len(answer)} chars)"
         )
         return answer
 
@@ -104,6 +105,7 @@ class OllamaLLMProvider(BaseLLMProvider):
         even if the fast model is not yet downloaded.
         """
         sys_prompt = system_prompt or ERP_SYSTEM_PROMPT
+        logger.info(f"Ollama generate_fast requested -> targeting fast_model='{self.fast_model}'")
         try:
             return self._call(self.fast_model, sys_prompt, user_message, temperature)
         except Exception as fast_err:
@@ -116,6 +118,26 @@ class OllamaLLMProvider(BaseLLMProvider):
             except Exception as e:
                 logger.error(f"Ollama fast generation (with fallback) failed: {e}")
                 raise
+
+    def prewarm(self) -> Dict[str, int]:
+        """Pre-warm both fast and full models into memory to eliminate cold-start delay."""
+        timings = {}
+        for m in [self.fast_model, self.model]:
+            t0 = time.perf_counter()
+            try:
+                logger.info(f"Pre-warming Ollama model '{m}'...")
+                resp = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": m, "prompt": "hi", "keep_alive": "10m"},
+                    timeout=60,
+                )
+                resp.raise_for_status()
+                elapsed = int((time.perf_counter() - t0) * 1000)
+                timings[m] = elapsed
+                logger.info(f"Model '{m}' pre-warmed successfully in {elapsed}ms")
+            except Exception as e:
+                logger.warning(f"Failed to pre-warm model '{m}': {e}")
+        return timings
 
     def generate_stream(
         self,
