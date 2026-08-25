@@ -207,3 +207,23 @@ tests/test_voice.py ....................                                [ 81%]
 - `TestChatStreamEndpoint::test_chat_stream_returns_sse_stream`: Validates SSE event formatting and trailing metadata.
 - `TestRequestIdHeader::test_request_id_generated_if_absent`: Verifies UUID generation in headers.
 - `TestRequestIdHeader::test_request_id_preserved_if_provided`: Verifies trace ID propagation.
+
+---
+
+## 5. Demo-Day Latency Mitigation & Operational Protocol
+
+> [!IMPORTANT]
+> **Hard Floor of CPU-Only Inference:**
+> Local CPU inference has a fundamental mathematical ceiling: on standard x86 CPU cores without dedicated GPU tensor cores, a 7B parameter model produces ~8–12 tokens/second. A full ERP compound query requires ~21–27 seconds wall-clock time across its pipeline stages (routing extraction + DB execution + Markdown answer formatting). 
+> 
+> **Server-Sent Events (SSE) Streaming** solves this for user perception by delivering the first token within **~10 seconds** (immediately following tool execution) and streaming output smoothly across the screen rather than presenting 25+ seconds of blank screen.
+
+### Mandatory Live Demo Checklist:
+
+1. **Pre-Warm Models Prior to Stage Presentation:**
+   - The backend server now automatically pre-warms both `qwen2.5:3b-instruct` and `qwen2.5:7b-instruct` on startup with `keep_alive: 10m`.
+   - Start the backend and Ollama server at least **10 minutes before the live demo** to ensure all weights reside in RAM and avoid any cold-load penalty on stage.
+
+2. **Use Validated Evaluation Queries:**
+   - Stick to the canonical, validated queries from the Phase 4/5 evaluation matrix during live panel demonstrations (e.g. `"Show me attendance for CS601"`, `"Which student has lowest attendance?"`, `"What is the condonation fee?"`). These queries have verified deterministic response times and proven routing paths.
+
