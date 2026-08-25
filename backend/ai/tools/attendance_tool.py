@@ -129,21 +129,54 @@ class AttendanceTool(BaseTool):
             
         elif action == "risk_list":
             sql = """
-                SELECT usn, student_name, course_code, attendance_pct, risk_level
-                FROM vw_student_risk
+                SELECT r.usn, r.student_name, r.course_code, r.attendance_pct, r.risk_level,
+                       att.total_classes, att.classes_attended, att.course_name
+                FROM vw_student_risk r
+                JOIN vw_attendance_summary att ON att.usn = r.usn AND att.course_code = r.course_code
             """
             
             if course_code:
-                sql += " WHERE course_code = %s"
-                results = execute_query(sql, (course_code,))
+                sql += " WHERE r.course_code = %s"
+                raw_results = execute_query(sql, (course_code,))
             else:
-                results = execute_query(sql)
+                raw_results = execute_query(sql)
                 
-            if not results:
+            if not raw_results:
                 return {"message": "No students are currently at attendance risk."}
                 
+            enriched = []
+            for r in raw_results:
+                total = int(r["total_classes"])
+                attended = int(r["classes_attended"])
+                curr_pct = float(r["attendance_pct"])
+                threshold = 75.0
+                gap = round(threshold - curr_pct, 2)
+                needed_75 = compute_classes_needed_to_reach_target(attended, total, 75.0)
+                needed_85 = compute_classes_needed_to_reach_target(attended, total, 85.0)
+
+                enriched.append({
+                    "usn": r["usn"],
+                    "student_name": r["student_name"],
+                    "course_code": r["course_code"],
+                    "course_name": r.get("course_name", ""),
+                    "current_attendance_pct": curr_pct,
+                    "classes_attended": attended,
+                    "total_classes": total,
+                    "threshold_pct": threshold,
+                    "shortage_percentage_points": gap,
+                    "risk_level": r["risk_level"],
+                    "classes_needed_to_reach_75": needed_75,
+                    "classes_needed_to_reach_85": needed_85,
+                    "explanation": (
+                        f"Current attendance is {curr_pct}% ({attended}/{total} classes). "
+                        f"Short by {gap}% points below the {threshold}% minimum threshold. "
+                        f"Needs to attend {needed_75} consecutive classes to reach 75%."
+                    )
+                })
+
             return {
-                "at_risk_students": results
+                "at_risk_students": enriched,
+                "summary": f"{len(enriched)} student(s) currently below the 75.0% attendance threshold."
             }
 
         elif action in ("calculate_classes_needed", "classes_needed"):

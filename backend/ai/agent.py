@@ -163,6 +163,11 @@ CRITICAL INSTRUCTIONS:
         format_prompt = """You are an AI ERP Assistant for a college.
 Format the provided JSON data into a clean, professional response.
 Use Markdown tables for lists.
+If the data contains at-risk students or attendance calculations, explicitly state:
+- The student's current attendance percentage and attended/total class numbers.
+- The threshold being compared against (e.g. 75.0% or 85.0%).
+- The exact shortage gap in percentage points.
+- The number of consecutive classes needed to reach eligibility (or safe classes that can be missed).
 If the user asked a specific follow-up question (e.g. 'which one has the lowest attendance?'), directly answer that question highlighting the specific record.
 If the data contains an error or "Not found", explain it politely to the user.
 Do NOT reveal internal IDs or backend details."""
