@@ -96,6 +96,11 @@ QDRANT_COLLECTION = os.environ.get("QDRANT_COLLECTION", "erp_documents")
 RAG_CHUNK_SIZE = int(os.environ.get("RAG_CHUNK_SIZE", "512"))
 RAG_CHUNK_OVERLAP = int(os.environ.get("RAG_CHUNK_OVERLAP", "64"))
 RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
+# Minimum cosine similarity score for a retrieved chunk to be considered relevant.
+# Chunks scoring below this threshold are discarded; if ALL chunks are below it,
+# the pipeline returns a "no relevant document found" signal instead of passing
+# weak matches to the LLM.  Empirically tuned to 0.58 for mxbai-embed-large / Titan.
+RAG_MIN_SCORE = float(os.environ.get("RAG_MIN_SCORE", "0.58"))
 
 # ── Polly (TTS) ────────────────────────────────────────────────────────────
 POLLY_VOICE_ID = os.environ.get("POLLY_VOICE_ID", "Joanna")
