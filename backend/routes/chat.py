@@ -42,6 +42,7 @@ async def chat_message(message: dict):
             "query_type": result["query_type"],
             "response_time_ms": result["response_time_ms"],
             "source": result["source_info"],
+            "sources": result.get("sources", []),
             "timestamp": datetime.utcnow().isoformat(),
         }
 
@@ -81,6 +82,7 @@ async def text_query(payload: dict):
         "query_type": result["query_type"],
         "response_time_ms": result["response_time_ms"],
         "source": result["source_info"],
+        "sources": result.get("sources", []),
         "audio_url": audio_url,
         "timestamp": datetime.utcnow().isoformat(),
     }

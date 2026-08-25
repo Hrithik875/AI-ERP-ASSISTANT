@@ -51,9 +51,10 @@ Reply ONLY with the exact word: erp, document, or general. Do not add any punctu
 
 # ── Tool Dispatcher (No SQL Generation) ────────────────────────────────────
 
-def execute_tool_query(question: str) -> Tuple[str, str]:
+def execute_tool_query(question: str) -> Tuple[str, str, list]:
     """
     Extract intent/entities and dispatch to the correct Tool.
+    Returns (answer, source_info, sources).
     """
     llm = get_llm()
     
@@ -87,6 +88,7 @@ CRITICAL INSTRUCTIONS:
 - If it's timetable, use TimetableTool.
 - If it's courses, use CourseTool.
 - If it's analytics, use AnalyticsTool.
+- If it asks about college policies, documents, circulars, or general regulations, use DocumentTool.
 """
     
     try:
@@ -119,9 +121,16 @@ CRITICAL INSTRUCTIONS:
                 break
                 
         if not selected_tool:
-            return "I could not determine the right tool for your query.", "Extraction failed"
+            return "I could not determine the right tool for your query.", "Extraction failed", []
             
         tool_results = selected_tool.execute(params)
+        sources = []
+
+        # If DocumentTool was selected, check for fallback / sources
+        if selected_tool.name == "DocumentTool":
+            if not tool_results.get("has_relevant_results", True):
+                return tool_results.get("message", "No relevant documents found."), "DocumentTool (no match)", []
+            sources = tool_results.get("sources", [])
         
         # 4. Format results
         format_prompt = """You are an AI ERP Assistant for a college.
@@ -136,14 +145,14 @@ Do NOT reveal internal IDs or backend details."""
             temperature=0.3
         )
         
-        return answer, f"{tool_name} {params}"
+        return answer, f"{tool_name} {params}", sources
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse tool JSON: {e} | Raw: {json_resp}")
-        return "I encountered an error understanding your request.", "JSON Decode Error"
+        return "I encountered an error understanding your request.", "JSON Decode Error", []
     except Exception as e:
         logger.error(f"Tool execution failed: {e}")
-        return f"I encountered an error processing your query: {str(e)}", "Execution Error"
+        return f"I encountered an error processing your query: {str(e)}", "Execution Error", []
 
 
 # ── Main Orchestrator ───────────────────────────────────────────────────────
@@ -155,9 +164,10 @@ def process_query(question: str) -> Dict:
 
     try:
         if query_type == "erp":
-            answer, source_info = execute_tool_query(question)
+            answer, source_info, sources = execute_tool_query(question)
 
         elif query_type == "document":
+            sources = []
             try:
                 # Direct route to DocumentTool
                 selected_tool = None
@@ -167,12 +177,20 @@ def process_query(question: str) -> Dict:
                         break
                 if selected_tool:
                     results = selected_tool.execute({"query": question})
-                    llm = get_llm()
-                    answer = llm.generate(
-                        user_message=question,
-                        context=f"Retrieved Documents:\n{json.dumps(results, default=str)}",
-                    )
-                    source_info = "DocumentTool"
+
+                    if results.get("has_relevant_results"):
+                        # Good match — pass context to LLM for a grounded answer
+                        sources = results.get("sources", [])
+                        llm = get_llm()
+                        answer = llm.generate(
+                            user_message=question,
+                            context=f"Retrieved Documents:\n{results['context']}",
+                        )
+                        source_info = "DocumentTool"
+                    else:
+                        # No relevant document found — return explicit fallback
+                        answer = results.get("message", "No relevant documents found.")
+                        source_info = "DocumentTool (no match)"
                 else:
                     answer = "Document tool not found."
                     source_info = "Missing Tool"
@@ -186,6 +204,7 @@ def process_query(question: str) -> Dict:
             llm = get_llm()
             answer = llm.generate(user_message=question)
             source_info = "Direct LLM"
+            sources = []
 
         elapsed_ms = int((time.time() - start) * 1000)
 
@@ -200,6 +219,7 @@ def process_query(question: str) -> Dict:
             "query_type": query_type,
             "response_time_ms": elapsed_ms,
             "source_info": source_info,
+            "sources": sources,
         }
 
     except Exception as e:
@@ -210,6 +230,7 @@ def process_query(question: str) -> Dict:
             "query_type": query_type,
             "response_time_ms": elapsed_ms,
             "source_info": "Error",
+            "sources": [],
         }
 
 
