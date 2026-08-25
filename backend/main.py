@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"  Bucket:     {S3_BUCKET_NAME}")
         logger.info(f"  LLM:        Amazon Bedrock / {BEDROCK_MODEL_ID}")
     else:
-        logger.info("  Services:   Local Ollama + faster-whisper + edge-tts")
+        logger.info("  Services:   Local Ollama + faster-whisper + Piper TTS")
         logger.info("  Storage:    Local Filesystem")
     logger.info(f"  DB:         Aurora MySQL (Local or AWS)")
     logger.info(f"  Vector DB:  Qdrant")

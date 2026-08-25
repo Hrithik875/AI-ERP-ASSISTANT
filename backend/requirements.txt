@@ -15,7 +15,7 @@ mangum
 # Install Ollama separately from https://ollama.com
 requests
 faster-whisper
-edge-tts
+piper-tts
 python-dotenv
 
 # ── Database (Aurora MySQL / Local MySQL) ────────────────────────────────────
