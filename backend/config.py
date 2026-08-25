@@ -65,12 +65,16 @@ OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 # Full-quality model: used for the final user-visible answer formatting step.
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 # Lightweight model: used for internal LLM calls (intent classification fallback,
-# tool-dispatch JSON extraction). Falls back to OLLAMA_MODEL if not set.
-OLLAMA_FAST_MODEL = os.environ.get("OLLAMA_FAST_MODEL", "qwen2.5:3b-instruct")
+# tool-dispatch JSON extraction). Defaults to OLLAMA_MODEL to prevent dual-model
+# memory oversubscription on CPU unless explicitly configured.
+OLLAMA_FAST_MODEL = os.environ.get("OLLAMA_FAST_MODEL", OLLAMA_MODEL)
 OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
 
 LOCAL_STORAGE_DIR = os.environ.get("LOCAL_STORAGE_DIR", "./local_storage")
 LOCAL_SERVER_URL = os.environ.get("LOCAL_SERVER_URL", "http://localhost:8000")
+# CPU Threading & Context options for Ollama local inference
+OLLAMA_NUM_THREADS = int(os.environ.get("OLLAMA_NUM_THREADS", "0"))  # 0 = auto-detect physical cores
+OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "2048"))  # avoids bloated 4096 KV cache
 
 # ── Timeout Controls ─────────────────────────────────────────────────────────
 # Hard timeout (seconds) for a single Ollama generation call.

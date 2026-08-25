@@ -17,13 +17,27 @@ import logging
 import time
 from typing import Dict, Generator
 
+import os
 import requests
 
-from config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_FAST_MODEL, LLM_TIMEOUT_SECONDS
+from config import (
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    OLLAMA_FAST_MODEL,
+    LLM_TIMEOUT_SECONDS,
+    OLLAMA_NUM_THREADS,
+    OLLAMA_NUM_CTX,
+)
 from ai.llm_service import ERP_SYSTEM_PROMPT
 from providers.base import BaseLLMProvider
 
 logger = logging.getLogger("erp-assistant")
+
+try:
+    import psutil
+    _detected_cores = psutil.cpu_count(logical=False) or os.cpu_count() or 4
+except Exception:
+    _detected_cores = os.cpu_count() or 4
 
 
 class OllamaLLMProvider(BaseLLMProvider):
@@ -32,15 +46,26 @@ class OllamaLLMProvider(BaseLLMProvider):
         self.model = OLLAMA_MODEL
         self.fast_model = OLLAMA_FAST_MODEL
         self.timeout = LLM_TIMEOUT_SECONDS
+        self.num_threads = OLLAMA_NUM_THREADS if OLLAMA_NUM_THREADS > 0 else _detected_cores
+        self.num_ctx = OLLAMA_NUM_CTX if OLLAMA_NUM_CTX > 0 else 2048
         logger.info(
             f"Ollama LLM Provider initialized "
             f"(url={self.base_url}, model={self.model}, "
-            f"fast_model={self.fast_model}, timeout={self.timeout}s)"
+            f"fast_model={self.fast_model}, threads={self.num_threads}, "
+            f"num_ctx={self.num_ctx}, timeout={self.timeout}s)"
         )
 
     @property
     def model_id(self) -> str:
         return self.model
+
+    def _get_options(self, temperature: float) -> dict:
+        opts = {"temperature": temperature}
+        if self.num_threads > 0:
+            opts["num_thread"] = self.num_threads
+        if self.num_ctx > 0:
+            opts["num_ctx"] = self.num_ctx
+        return opts
 
     # ── Private call helper ──────────────────────────────────────────────────
 
@@ -57,7 +82,7 @@ class OllamaLLMProvider(BaseLLMProvider):
                     {"role": "user", "content": user},
                 ],
                 "stream": False,
-                "options": {"temperature": temperature},
+                "options": self._get_options(temperature),
             },
             timeout=self.timeout,
         )
@@ -120,15 +145,22 @@ class OllamaLLMProvider(BaseLLMProvider):
                 raise
 
     def prewarm(self) -> Dict[str, int]:
-        """Pre-warm both fast and full models into memory to eliminate cold-start delay."""
+        """Pre-warm configured models into memory with explicit thread/context options."""
         timings = {}
-        for m in [self.fast_model, self.model]:
+        # If fast_model and model are the same, only warm once
+        models_to_warm = [self.model] if self.fast_model == self.model else [self.fast_model, self.model]
+        for m in models_to_warm:
             t0 = time.perf_counter()
             try:
-                logger.info(f"Pre-warming Ollama model '{m}'...")
+                logger.info(f"Pre-warming Ollama model '{m}' (threads={self.num_threads}, num_ctx={self.num_ctx})...")
                 resp = requests.post(
                     f"{self.base_url}/api/generate",
-                    json={"model": m, "prompt": "hi", "keep_alive": "10m"},
+                    json={
+                        "model": m,
+                        "prompt": "hi",
+                        "keep_alive": "10m",
+                        "options": self._get_options(0.0),
+                    },
                     timeout=60,
                 )
                 resp.raise_for_status()
@@ -167,7 +199,7 @@ class OllamaLLMProvider(BaseLLMProvider):
                         {"role": "user", "content": full_prompt},
                     ],
                     "stream": True,
-                    "options": {"temperature": temperature},
+                    "options": self._get_options(temperature),
                 },
                 timeout=self.timeout,
                 stream=True,
