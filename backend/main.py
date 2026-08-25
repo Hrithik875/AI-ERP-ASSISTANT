@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from mangum import Mangum
 
 from config import logger, AWS_REGION, S3_BUCKET_NAME, BEDROCK_MODEL_ID, APP_MODE, LOCAL_STORAGE_DIR, ALLOWED_ORIGINS
+from middleware.request_id import RequestIDMiddleware
 
 # ── Import Routes ───────────────────────────────────────────────────────────
 from routes.health    import router as health_router
@@ -106,6 +107,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Correlation ID — generates X-Request-ID per request and threads it through all logs.
+app.add_middleware(RequestIDMiddleware)
 
 # ── Register Routes ─────────────────────────────────────────────────────────
 
