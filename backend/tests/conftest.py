@@ -49,6 +49,7 @@ EXPECTED_EMBEDDING_PROVIDER = {
 class _StubLLM:
     """Deterministic LLM stub — returns fast canned responses without any network calls."""
     model_id = "stub-model"
+    fast_model = "stub-fast-model"
 
     def generate(self, user_message="", context="", system_prompt="", temperature=0.3):
         # Classification stub: return 'erp' for attendance queries, etc.
@@ -57,8 +58,16 @@ class _StubLLM:
             return '{"tool_name": "AttendanceTool", "params": {"action": "student_summary", "usn": "CS2022001"}}'
         return "Stub LLM response: query processed successfully."
 
+    def generate_fast(self, user_message="", system_prompt="", temperature=0.0):
+        return self.generate(user_message=user_message, system_prompt=system_prompt, temperature=temperature)
+
+    def generate_stream(self, user_message="", context="", system_prompt="", temperature=0.3):
+        yield "Stub "
+        yield "LLM "
+        yield "response: query processed successfully."
+
     def health_check(self):
-        return {"status": "ok", "provider": "stub"}
+        return {"status": "ok", "provider": "stub", "model": self.model_id, "fast_model": self.fast_model}
 
 
 class _StubEmbeddingProvider:

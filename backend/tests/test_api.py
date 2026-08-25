@@ -265,3 +265,61 @@ class TestFacultyEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Phase 7 — Observability & Streaming Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestSystemStatusEndpoint:
+    """Tests for GET /system-status (deep observability endpoint)"""
+
+    def test_system_status_returns_200(self, client):
+        response = client.get("/system-status")
+        assert response.status_code == 200
+        data = response.json()
+        assert "mode" in data
+        assert "services" in data
+        assert "overall" in data
+        assert data["overall"] in ("ok", "degraded", "error")
+        assert "mysql" in data["services"]
+        assert "llm" in data["services"]
+
+    def test_system_status_reports_service_latencies(self, client):
+        response = client.get("/system-status")
+        data = response.json()
+        assert "status" in data["services"]["mysql"]
+        assert "status" in data["services"]["llm"]
+
+
+class TestChatStreamEndpoint:
+    """Tests for POST /chat/stream (SSE streaming endpoint)"""
+
+    def test_chat_stream_empty_message_returns_400(self, client):
+        response = client.post("/chat/stream", json={"message": ""})
+        assert response.status_code == 400
+
+    def test_chat_stream_returns_sse_stream(self, client):
+        response = client.post("/chat/stream", json={"message": "What is the attendance summary?"})
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers.get("content-type", "")
+        body = response.text
+        assert "data:" in body
+        assert "[DONE]" in body
+
+
+class TestRequestIdHeader:
+    """Tests for X-Request-ID correlation tracking middleware"""
+
+    def test_request_id_generated_if_absent(self, client):
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert "x-request-id" in response.headers
+        assert len(response.headers["x-request-id"]) > 0
+
+    def test_request_id_preserved_if_provided(self, client):
+        custom_id = "custom-trace-uuid-12345"
+        response = client.get("/health", headers={"X-Request-ID": custom_id})
+        assert response.status_code == 200
+        assert response.headers.get("x-request-id") == custom_id
+
