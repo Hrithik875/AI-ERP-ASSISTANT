@@ -22,7 +22,7 @@ Architecture — Local Mode:
   - AI:        Ollama (local LLM + embeddings)
   - Database:  Local MySQL (same driver)
   - Vector DB: Qdrant (local)
-  - Speech:    faster-whisper (STT) + edge-tts (TTS)
+  - Speech:    faster-whisper (STT) + Piper TTS (TTS)
   - Storage:   Local filesystem
   - Backend:   Uvicorn (local)
 """
@@ -54,8 +54,8 @@ APP_MODE = os.environ.get("APP_MODE", "aws")  # "aws" or "local"
 
 # ── Local Mode Settings ─────────────────────────────────────────────────────
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
-OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
 
 LOCAL_STORAGE_DIR = os.environ.get("LOCAL_STORAGE_DIR", "./local_storage")
 LOCAL_SERVER_URL = os.environ.get("LOCAL_SERVER_URL", "http://localhost:8000")
