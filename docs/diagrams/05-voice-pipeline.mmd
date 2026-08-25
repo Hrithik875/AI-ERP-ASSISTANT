@@ -1,0 +1,44 @@
+﻿%%{init: {"theme": "dark"}}%%
+sequenceDiagram
+    actor User
+    participant Browser as Browser<br/>(VoicePipeline.tsx)
+    participant API as FastAPI
+    participant STT as STTProvider
+    participant AG as Agent
+    participant TTS as TTSProvider
+
+    rect rgb(40,60,80)
+        note over Browser: Voice Input
+        User->>Browser: clicks mic button
+        Browser->>Browser: MediaRecorder.start()<br/>capture audio chunks
+        User->>Browser: clicks stop
+        Browser->>Browser: MediaRecorder.stop()<br/>assemble WAV blob
+        Browser->>API: POST /voice/transcribe<br/>multipart audio file
+    end
+
+    rect rgb(40,80,60)
+        note over API,AG: Transcription + Query
+        API->>STT: STTProvider.transcribe(audio_bytes)
+        alt local mode
+            STT-->>API: faster-whisper transcript
+        else aws mode
+            STT-->>API: Amazon Transcribe result
+        end
+        API->>AG: process_query(transcript, history)
+        AG-->>API: {answer, tool_used, sources}
+    end
+
+    rect rgb(80,60,40)
+        note over API,Browser: Text-to-Speech Response
+        API->>TTS: TTSProvider.synthesize(answer_text)
+        alt local mode
+            TTS-->>API: pyttsx3 WAV bytes
+        else aws mode
+            TTS-->>API: Amazon Polly MP3
+        end
+        API-->>Browser: audio bytes + transcript + tool_used
+        Browser->>Browser: Audio.play()
+        Browser-->>User: spoken answer + chat bubble
+    end
+
+    note over Browser,TTS: Known limitation: faster-whisper on\nCPU may emit Error 1094995529 on\nsome audio lengths — retry mitigates

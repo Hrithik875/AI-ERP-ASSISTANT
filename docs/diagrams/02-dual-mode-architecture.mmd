@@ -1,0 +1,48 @@
+﻿%%{init: {"theme": "dark"}}%%
+graph LR
+    ENV["APP_MODE env var\n'local' | 'aws'"]
+
+    subgraph LOCAL["Local Mode  (APP_MODE=local)"]
+        direction TB
+        OL["OllamaLLMProvider\nqwen2.5:7b-instruct (format)\nqwen2.5:3b-instruct (fast)"]
+        OE["OllamaEmbeddingProvider\nnomic-embed-text"]
+        LS["LocalStorageProvider\nfilesystem /local_storage"]
+        LT["LocalTTSProvider\npyttsx3"]
+        LST["LocalSTTProvider\nfaster-whisper (tiny.en)"]
+        MY["MySQL (local)\n127.0.0.1:3306"]
+        QD["Qdrant (local)\n127.0.0.1:6333"]
+    end
+
+    subgraph AWS["AWS Mode  (APP_MODE=aws)"]
+        direction TB
+        AB["AWSLLMProvider\nBedrock — Claude 3 Haiku"]
+        AE["AWSEmbeddingProvider\nBedrock — Titan Embeddings G1"]
+        AS3["AWSStorageProvider\nS3 bucket"]
+        AP["AWSTTSProvider\nAmazon Polly"]
+        AT["AWSSTTProvider\nAmazon Transcribe"]
+        RDS["Aurora MySQL\nRDS cluster"]
+        QDA["Qdrant (hosted)\nor OpenSearch"]
+    end
+
+    subgraph REG["registry.py — Provider Factory"]
+        direction TB
+        GLLM["get_llm_provider()"]
+        GEMB["get_embedding_provider()"]
+        GSTO["get_storage_provider()"]
+        GTTS["get_tts_provider()"]
+        GSTT["get_stt_provider()"]
+    end
+
+    subgraph BASE["providers/base.py — Abstract Interfaces"]
+        BL["BaseLLMProvider\ngenerate() generate_fast()\ngenerate_stream() prewarm()"]
+        BE2["BaseEmbeddingProvider\nembed_text()"]
+        BS["BaseStorageProvider\nstore() retrieve()"]
+        BT["BaseTTSProvider\nsynthesize()"]
+        BST["BaseSTTProvider\ntranscribe()"]
+    end
+
+    ENV -->|"'local'"| LOCAL
+    ENV -->|"'aws'"| AWS
+    REG -->|"selects"| LOCAL
+    REG -->|"selects"| AWS
+    BASE --> REG

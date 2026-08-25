@@ -1,0 +1,55 @@
+﻿%%{init: {"theme": "dark"}}%%
+sequenceDiagram
+    actor User
+    participant ChatUI as ChatUI.tsx
+    participant API as FastAPI /chat/stream
+    participant MW as RequestID Middleware
+    participant AG as agent.py process_query()
+    participant CLS as classify_query()
+    participant DISP as execute_tool_query()
+    participant TOOL as ERP Tool
+    participant DB as MySQL
+    participant FMT as format step
+    participant LLM_FAST as Ollama fast model<br/>(qwen2.5:3b)
+    participant LLM_FULL as Ollama full model<br/>(qwen2.5:7b)
+
+    User->>ChatUI: types question + hits Send
+    ChatUI->>ChatUI: append {role:user} to history[]
+    ChatUI->>API: EventSource POST /chat/stream<br/>{message, history[-8:]}
+    API->>MW: attach X-Request-ID
+    MW->>AG: process_query(question, history, stream=True)
+
+    rect rgb(40,60,80)
+        note over AG,CLS: Phase 5 — Conversation Context
+        AG->>CLS: classify_query(question, history)
+        CLS->>CLS: keyword pre-check (no LLM)
+        alt ambiguous query
+            CLS->>LLM_FAST: intent prompt + history ctx
+            LLM_FAST-->>CLS: "erp" | "document" | "general"
+        end
+        CLS-->>AG: query_type
+    end
+
+    rect rgb(40,80,60)
+        note over AG,DB: Phase 7 — Fast-model Dispatch
+        AG->>DISP: execute_tool_query(question, history, stream=True)
+        DISP->>LLM_FAST: tool extraction prompt + history
+        LLM_FAST-->>DISP: JSON {tool_name, params}
+        DISP->>TOOL: tool.execute(params)
+        TOOL->>DB: parameterized SQL
+        DB-->>TOOL: rows
+        TOOL-->>DISP: structured result dict
+    end
+
+    rect rgb(80,60,40)
+        note over DISP,FMT: Phase 7 — Streaming Full-model Format
+        DISP->>LLM_FULL: format prompt (full model, stream=True)
+        loop SSE token stream
+            LLM_FULL-->>API: token chunk
+            API-->>ChatUI: data: {"token": "..."}
+        end
+        API-->>ChatUI: data: {"done": true, "tool_used": "AttendanceTool"}
+    end
+
+    ChatUI->>ChatUI: append {role:assistant, content} to history[]
+    ChatUI-->>User: streamed answer + tool badge

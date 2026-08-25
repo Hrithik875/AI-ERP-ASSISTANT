@@ -1,0 +1,75 @@
+﻿%%{init: {"theme": "dark"}}%%
+graph TB
+    subgraph FE["Frontend (Next.js 14 / TypeScript)"]
+        UI["ChatUI.tsx — SSE consumer, history state"]
+        VP["VoicePipeline.tsx — MediaRecorder WAV"]
+        SP["StatusPanel.tsx — system health"]
+        API["api.ts — streamChatMessage, fetchStatus"]
+    end
+
+    subgraph BE["Backend (FastAPI / Python 3.12)"]
+        MW["RequestID Middleware"]
+        CHAT["POST /chat   POST /chat/stream (SSE)"]
+        VOICE["POST /voice/transcribe   POST /voice/speak"]
+        DOC["POST /documents/upload   GET /documents"]
+        DB_R["GET /attendance   /grades   /timetable"]
+        HEALTH["GET /health   GET /system-status"]
+
+        subgraph AG["AI Agent (agent.py)"]
+            CLS["classify_query() — keyword → fast-LLM"]
+            DISP["execute_tool_query() — fast-LLM dispatch"]
+            FMT["format answer — full-quality LLM"]
+        end
+
+        subgraph TOOLS["Registered Tools"]
+            AT["AttendanceTool"]
+            GT["GradesTool"]
+            TT["TimetableTool"]
+            CT["CourseTool"]
+            DT["DocumentTool"]
+            ANT["AnalyticsTool"]
+        end
+
+        subgraph RAG["RAG Pipeline (rag_pipeline.py)"]
+            CH["Chunker 500tok/50 overlap"]
+            EMB["EmbeddingProvider"]
+            VS["Vector Store"]
+            RET["Retriever cosine + MMR"]
+        end
+    end
+
+    subgraph DATA["Data Layer"]
+        MY["MySQL — students, attendance, grades"]
+        QD["Qdrant — document vectors"]
+        LS["LocalStorage — file bytes"]
+    end
+
+    subgraph PROV["Provider Abstraction (registry.py)"]
+        direction LR
+        LLP["OllamaLLMProvider"]
+        ALP["AWSLLMProvider"]
+        LEP["OllamaEmbeddingProvider"]
+        AEP["AWSEmbeddingProvider"]
+        LTTS["LocalTTSProvider"]
+        ATTS["AWSTTSProvider"]
+        LSTT["LocalSTTProvider"]
+        ASTT["AWSSTTProvider"]
+    end
+
+    UI -->|"EventSource"| CHAT
+    VP -->|"multipart/form-data"| VOICE
+    SP -->|"polling"| HEALTH
+
+    CHAT --> MW --> AG
+    CLS -->|"fast model"| PROV
+    DISP -->|"fast model"| PROV
+    FMT -->|"full model"| PROV
+
+    AG --> TOOLS
+    AT & GT & TT & CT & ANT -->|"parameterized SQL"| MY
+    DT --> RAG --> EMB --> VS --> QD
+
+    VOICE -->|"STT"| LSTT
+    VOICE -->|"TTS"| LTTS
+    DOC --> LS
+    DOC --> RAG

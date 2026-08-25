@@ -1,0 +1,27 @@
+﻿%%{init: {"theme": "dark"}}%%
+flowchart TD
+    UP["User uploads document\nPDF / DOCX / TXT"]
+    STORE["StorageProvider\nstore bytes locally or in S3"]
+    PARSE["Document Parser\nextract raw text"]
+    CHUNK["Semantic Chunker\n500 tokens / 50-token overlap\npreserves paragraph boundaries"]
+    EMB["EmbeddingProvider\nomic-embed-text (local)\nTitan Embeddings G1 (AWS)\n→ 768-dim dense vector"]
+    UPSERT["Qdrant Upsert\ncollection: erp_documents\npayload: {doc_id, chunk_idx,\nsource_name, chunk_text}"]
+
+    subgraph QUERY["Query-time Retrieval"]
+        QIN["User question"]
+        QEMB["Embed question\n→ query vector"]
+        SEARCH["Qdrant cosine search\ntop-k=5 candidates"]
+        RERANK["Reranker\nMMR diversity filter\n→ top-k=3 final"]
+        CTX["Context assembly\nchunks + source metadata"]
+        GEN["LLM generate answer\ngrounded on context only"]
+        SRC["Source citations\nattached to response"]
+    end
+
+    THRESH{"similarity score\n>= threshold?"}
+    NORES["Return 'no relevant\ndocuments found'"]
+
+    UP --> STORE --> PARSE --> CHUNK --> EMB --> UPSERT
+
+    QIN --> QEMB --> SEARCH --> THRESH
+    THRESH -->|"yes"| RERANK --> CTX --> GEN --> SRC
+    THRESH -->|"no"| NORES
