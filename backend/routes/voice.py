@@ -1,9 +1,10 @@
 """
 AI ERP Assistant — Voice Routes
 ==================================
-Voice input pipeline: Upload → S3 → Transcribe → AI → TTS → Response
+Voice input pipeline: Upload → STT → AI → TTS → Response
 """
 
+import asyncio
 import uuid
 import logging
 from datetime import datetime
@@ -116,17 +117,19 @@ async def voice_query(audio: UploadFile = File(...)):
     job_name = f"erp-voice-{file_id}"
     get_stt_provider().transcribe_async(file_content, audio_format=ext, job_name=job_name)
 
-    # Step 3: Poll for completion (max 60s)
-    import time
+    # Step 3: Poll for completion (max 60 s).
+    # asyncio.sleep yields control to the event loop between polls, allowing
+    # other concurrent requests (e.g. /chat) to be served while waiting.
     transcript_text = None
     for _ in range(30):
-        time.sleep(2)
+        await asyncio.sleep(2)
         result = get_stt_provider().get_transcription_status(job_name)
         if result["status"] == "COMPLETED":
             transcript_text = result.get("transcript", "")
             break
         elif result["status"] == "FAILED":
             raise HTTPException(status_code=500, detail=f"Transcription failed: {result.get('reason')}")
+
 
     if not transcript_text:
         raise HTTPException(status_code=504, detail="Transcription timed out")
