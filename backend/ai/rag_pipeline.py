@@ -2,9 +2,9 @@
 AI ERP Assistant — RAG Pipeline
 =================================
 Complete Retrieval-Augmented Generation pipeline:
-  1. Load documents from S3
+  1. Load documents from S3 / local storage
   2. Chunk documents into passages
-  3. Generate embeddings (Amazon Bedrock Titan Embeddings V2)
+  3. Generate embeddings via the active provider (Bedrock Titan or local Ollama)
   4. Store in Qdrant vector database
   5. Query: embed → search → retrieve → pass context to LLM
 """
@@ -18,7 +18,9 @@ from config import (
     QDRANT_URL, QDRANT_COLLECTION,
     RAG_CHUNK_SIZE, RAG_CHUNK_OVERLAP, RAG_TOP_K,
     S3_BUCKET_NAME, AWS_REGION,
-    BEDROCK_EMBEDDING_DIMENSION,
+    # NOTE: BEDROCK_EMBEDDING_DIMENSION is intentionally NOT imported here.
+    # The collection vector size is derived dynamically from self.embedder.dimension
+    # so it is always correct regardless of which embedding provider is active.
 )
 
 logger = logging.getLogger("erp-assistant")
@@ -56,21 +58,39 @@ class RAGPipeline:
         return self._storage_provider
 
     def _ensure_collection(self):
-        """Create Qdrant collection if it doesn't exist."""
+        """
+        Create the Qdrant collection if it doesn't exist.
+
+        The vector size is read from self.embedder.dimension rather than a
+        hardcoded constant so the collection is always sized correctly for
+        whichever embedding provider is currently active (AWS Titan @ 1024,
+        local mxbai-embed-large @ 1024, or any future model).
+        """
         from qdrant_client.models import VectorParams, Distance
+
+        # Resolve the real dimension from the active embedding provider.
+        # self.embedder is a lazy property; accessing it here is safe because
+        # self._qdrant_client is already set before _ensure_collection is called.
+        dim = self.embedder.dimension
 
         collections = [c.name for c in self.qdrant.get_collections().collections]
         if QDRANT_COLLECTION not in collections:
             self.qdrant.create_collection(
                 collection_name=QDRANT_COLLECTION,
                 vectors_config=VectorParams(
-                    size=BEDROCK_EMBEDDING_DIMENSION,
+                    size=dim,
                     distance=Distance.COSINE,
                 ),
             )
-            logger.info(f"Created Qdrant collection: {QDRANT_COLLECTION} (dim={BEDROCK_EMBEDDING_DIMENSION})")
+            logger.info(
+                f"Created Qdrant collection: {QDRANT_COLLECTION} "
+                f"(dim={dim}, provider={type(self.embedder).__name__})"
+            )
         else:
-            logger.info(f"Qdrant collection exists: {QDRANT_COLLECTION}")
+            logger.info(
+                f"Qdrant collection exists: {QDRANT_COLLECTION} "
+                f"(active provider dim={dim})"
+            )
 
     # ── Document Processing ─────────────────────────────────────────────
 
