@@ -15,25 +15,43 @@ from ai.tools import REGISTERED_TOOLS
 
 logger = logging.getLogger("erp-assistant")
 
+def _format_history_context(history: list) -> str:
+    """Format bounded prior turns into a clean conversation transcript snippet."""
+    if not history:
+        return ""
+    formatted = []
+    for turn in history[-4:]:
+        role = "User" if turn.get("role") == "user" else "Assistant"
+        content = str(turn.get("content", "")).strip()
+        if len(content) > 300:
+            content = content[:300] + "..."
+        formatted.append(f"{role}: {content}")
+    return "\n".join(formatted)
+
+
 # ── Query Classification ───────────────────────────────────────────────────
 
-def classify_query(query: str) -> str:
+def classify_query(query: str, history: list = None) -> str:
     """
     Classify a user query using the LLM into one of: 'erp', 'document', 'general'.
+    Utilizes conversation history to resolve contextual follow-ups.
     """
     llm = get_llm()
-    prompt = """You are an Intent Detection and Query Classification engine for an academic ERP system.
-Analyze the user's query and classify it into exactly ONE of the following categories:
+    history_ctx = _format_history_context(history)
+    history_section = f"\nRecent Conversation History:\n{history_ctx}\n" if history_ctx else ""
 
-- 'erp': If the query asks for database records or academic metrics (e.g., attendance, grades, GPA, schedules, timetables, faculty information, student information, courses, departments).
+    prompt = f"""You are an Intent Detection and Query Classification engine for an academic ERP system.
+Analyze the user's query (taking into account the conversation history if it is a follow-up) and classify it into exactly ONE of the following categories:
+
+- 'erp': If the query asks for database records, student metrics, or follow-ups referencing prior ERP data (e.g., attendance, grades, GPA, schedules, timetables, "which one has lowest", "how many more classes", faculty/student info, courses).
 - 'document': If the query asks for information likely found in documents (e.g., manual, syllabus, policy, circular, notice, report, assignment, notes).
 - 'general': If it's a general greeting, casual conversation, or entirely unrelated to the academic system.
-
+{history_section}
 Reply ONLY with the exact word: erp, document, or general. Do not add any punctuation or explanation."""
 
     try:
         result = llm.generate(
-            user_message=query,
+            user_message=f"Query: {query}",
             system_prompt=prompt,
             temperature=0.0
         )
@@ -51,12 +69,18 @@ Reply ONLY with the exact word: erp, document, or general. Do not add any punctu
 
 # ── Tool Dispatcher (No SQL Generation) ────────────────────────────────────
 
-def execute_tool_query(question: str) -> Tuple[str, str, list]:
+def execute_tool_query(question: str, history: list = None) -> Tuple[str, str, list]:
     """
     Extract intent/entities and dispatch to the correct Tool.
+    Uses conversation history to resolve referential entities and context.
     Returns (answer, source_info, sources).
     """
     llm = get_llm()
+    history_ctx = _format_history_context(history)
+    history_section = (
+        f"\nRecent Conversation History (use this to resolve references like 'that student', 'which one is lowest', course codes, or USNs):\n{history_ctx}\n"
+        if history_ctx else ""
+    )
     
     # 1. Build tool definitions
     tools_info = []
@@ -69,7 +93,8 @@ def execute_tool_query(question: str) -> Tuple[str, str, list]:
 Available tools:
 {tools_str}
 
-Analyze the user's question and select the most appropriate tool and the necessary parameters.
+Analyze the user's question (and recent conversation history if it is a follow-up) and select the most appropriate tool and the necessary parameters.
+{history_section}
 Respond ONLY with a valid JSON object matching this schema:
 {{
   "tool_name": "NameOfTheTool",
@@ -82,8 +107,9 @@ Respond ONLY with a valid JSON object matching this schema:
 CRITICAL INSTRUCTIONS:
 - ONLY output JSON. No markdown backticks, no explanations.
 - Map entities properly: if the user asks for "Aarav M", the `usn` might be required but you might not know it. If a name is provided and USN is needed, you might need to use `action: search` to find the USN first, or pass it if you know it.
+- If the user refers to a course or student from the conversation history (e.g., "which one has lowest attendance in that course?", "what about CS601?", "how many more classes does he need?"), extract the course_code or usn/name from the history!
 - If you can't figure it out, use the StudentTool search action or FacultyTool search action.
-- If it's an attendance query, use AttendanceTool.
+- If it's an attendance query or attendance calculation/risk query, use AttendanceTool.
 - If it's grades, use GradesTool.
 - If it's timetable, use TimetableTool.
 - If it's courses, use CourseTool.
@@ -136,11 +162,16 @@ CRITICAL INSTRUCTIONS:
         format_prompt = """You are an AI ERP Assistant for a college.
 Format the provided JSON data into a clean, professional response.
 Use Markdown tables for lists.
+If the user asked a specific follow-up question (e.g. 'which one has the lowest attendance?'), directly answer that question highlighting the specific record.
 If the data contains an error or "Not found", explain it politely to the user.
 Do NOT reveal internal IDs or backend details."""
         
+        user_msg = f"Question: {question}\nData: {json.dumps(tool_results, default=str)}"
+        if history_ctx:
+            user_msg = f"Prior Conversation:\n{history_ctx}\n\nCurrent Question: {question}\nData: {json.dumps(tool_results, default=str)}"
+            
         answer = llm.generate(
-            user_message=f"Question: {question}\nData: {json.dumps(tool_results, default=str)}",
+            user_message=user_msg,
             system_prompt=format_prompt,
             temperature=0.3
         )
@@ -157,14 +188,14 @@ Do NOT reveal internal IDs or backend details."""
 
 # ── Main Orchestrator ───────────────────────────────────────────────────────
 
-def process_query(question: str) -> Dict:
+def process_query(question: str, history: list = None) -> Dict:
     start = time.time()
-    query_type = classify_query(question)
+    query_type = classify_query(question, history=history)
     logger.info(f"Query classified as: {query_type} | Q: '{question[:80]}'")
 
     try:
         if query_type == "erp":
-            answer, source_info, sources = execute_tool_query(question)
+            answer, source_info, sources = execute_tool_query(question, history=history)
 
         elif query_type == "document":
             sources = []

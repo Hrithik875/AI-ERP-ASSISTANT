@@ -22,18 +22,20 @@ async def chat_message(message: dict):
     """
     Handle text-based chat messages.
     Routes query through AI agent → DB/RAG/LLM → Response + Optional TTS.
+    Accepts bounded conversation history to resolve conversational follow-ups.
     """
     user_message = message.get("message", "")
+    history = message.get("history", [])
     include_audio = message.get("include_audio", False)
 
-    logger.info(f"Chat: '{user_message[:100]}'")
+    logger.info(f"Chat: '{user_message[:100]}' (history_turns={len(history)})")
 
     if not user_message.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
     try:
-        # Process through AI agent
-        result = process_query(user_message)
+        # Process through AI agent with conversation history
+        result = process_query(user_message, history=history)
 
         response_data = {
             "id": str(uuid.uuid4()),
@@ -65,10 +67,11 @@ async def text_query(payload: dict):
     Same as /chat but with explicit field names.
     """
     query = payload.get("query", payload.get("message", ""))
+    history = payload.get("history", [])
     if not query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-    result = process_query(query)
+    result = process_query(query, history=history)
 
     # Optional TTS
     audio_url = None
