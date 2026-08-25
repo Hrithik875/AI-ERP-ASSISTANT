@@ -43,8 +43,16 @@ if not logger.handlers:
 
 try:
     from dotenv import load_dotenv
-    if os.path.exists(".env.local"):
-        load_dotenv(".env.local")
+    _env_paths = [
+        os.path.join(os.path.dirname(__file__), ".env.local"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+        ".env.local",
+        ".env",
+    ]
+    for _p in _env_paths:
+        if os.path.exists(_p):
+            load_dotenv(_p)
+            break
 except ImportError:
     pass
 

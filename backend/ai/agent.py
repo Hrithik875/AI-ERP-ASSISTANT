@@ -33,9 +33,32 @@ def _format_history_context(history: list) -> str:
 
 def classify_query(query: str, history: list = None) -> str:
     """
-    Classify a user query using the LLM into one of: 'erp', 'document', 'general'.
+    Classify a user query using fast heuristics with LLM fallback into: 'erp', 'document', 'general'.
     Utilizes conversation history to resolve contextual follow-ups.
     """
+    q_lower = query.lower()
+    doc_keywords = [
+        "document", "documents", "policy", "policies", "syllabus", "manual",
+        "circular", "circulars", "notice", "regulation", "regulations", "guideline"
+    ]
+    erp_keywords = [
+        "attendance", "grade", "grades", "marks", "gpa", "cgpa", "schedule",
+        "timetable", "student", "students", "faculty", "course", "courses",
+        "department", "classes", "class", "at-risk", "risk", "miss", "bunk",
+        "lowest", "highest", "which one", "who has", "how many", "usn"
+    ]
+
+    # Fast deterministic pre-checks
+    if any(k in q_lower for k in doc_keywords):
+        return "document"
+    if any(k in q_lower for k in erp_keywords):
+        return "erp"
+    if history:
+        hist_text = " ".join(str(t.get("content", "")) for t in history[-2:]).lower()
+        if any(k in hist_text for k in erp_keywords):
+            return "erp"
+
+    # LLM fallback for nuanced / ambiguous intents
     llm = get_llm()
     history_ctx = _format_history_context(history)
     history_section = f"\nRecent Conversation History:\n{history_ctx}\n" if history_ctx else ""
