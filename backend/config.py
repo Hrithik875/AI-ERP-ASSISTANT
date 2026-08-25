@@ -62,11 +62,23 @@ APP_MODE = os.environ.get("APP_MODE", "aws")  # "aws" or "local"
 
 # ── Local Mode Settings ─────────────────────────────────────────────────────
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+# Full-quality model: used for the final user-visible answer formatting step.
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+# Lightweight model: used for internal LLM calls (intent classification fallback,
+# tool-dispatch JSON extraction). Falls back to OLLAMA_MODEL if not set.
+OLLAMA_FAST_MODEL = os.environ.get("OLLAMA_FAST_MODEL", "qwen2.5:3b-instruct")
 OLLAMA_EMBEDDING_MODEL = os.environ.get("OLLAMA_EMBEDDING_MODEL", "mxbai-embed-large")
 
 LOCAL_STORAGE_DIR = os.environ.get("LOCAL_STORAGE_DIR", "./local_storage")
 LOCAL_SERVER_URL = os.environ.get("LOCAL_SERVER_URL", "http://localhost:8000")
+
+# ── Timeout Controls ─────────────────────────────────────────────────────────
+# Hard timeout (seconds) for a single Ollama generation call.
+LLM_TIMEOUT_SECONDS = int(os.environ.get("LLM_TIMEOUT_SECONDS", "60"))
+# Hard timeout (seconds) for a single MySQL query execution.
+DB_QUERY_TIMEOUT_SECONDS = int(os.environ.get("DB_QUERY_TIMEOUT_SECONDS", "10"))
+# Hard timeout (seconds) for Qdrant vector search calls.
+QDRANT_TIMEOUT_SECONDS = int(os.environ.get("QDRANT_TIMEOUT_SECONDS", "5"))
 
 
 # ── AWS ─────────────────────────────────────────────────────────────────────
