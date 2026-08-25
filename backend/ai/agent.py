@@ -42,7 +42,7 @@ def classify_query(query: str, history: list = None) -> str:
         "circular", "circulars", "notice", "regulation", "regulations", "guideline"
     ]
     erp_keywords = [
-        "attendance", "grade", "grades", "marks", "gpa", "cgpa", "schedule",
+        "attendance", "absent", "present", "grade", "grades", "marks", "gpa", "cgpa", "schedule",
         "timetable", "student", "students", "faculty", "course", "courses",
         "department", "classes", "class", "at-risk", "risk", "miss", "bunk",
         "lowest", "highest", "which one", "who has", "how many", "usn"

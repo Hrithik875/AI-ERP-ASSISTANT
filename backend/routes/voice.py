@@ -79,9 +79,16 @@ def get_transcript(job_name: str):
     """
     logger.info(f"Transcript status check: {job_name}")
 
+    if not job_name or not job_name.strip():
+        raise HTTPException(status_code=404, detail="Invalid job name")
+
     try:
-        result = get_stt_provider().get_transcription_status(job_name)
+        result = get_stt_provider().get_transcription_status(job_name.strip())
+        if result.get("status") == "FAILED" and "not found" in result.get("reason", "").lower():
+            raise HTTPException(status_code=404, detail=f"Transcription job not found: {job_name}")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Transcript check failed: {e}")
         raise HTTPException(status_code=404, detail=f"Transcription job not found: {job_name}")
