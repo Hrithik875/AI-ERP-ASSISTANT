@@ -150,16 +150,10 @@ class LLMService:
             return {"status": "error", "provider": "bedrock", "error": str(e)}
 
 
-# ── Singleton ───────────────────────────────────────────────────────────────
-_llm_instance: Optional[LLMService] = None
-
 def get_llm():
     """
-    Returns the singleton LLM provider instance from the registry.
+    Returns the active LLM provider instance from the registry.
     This maintains compatibility with existing code while supporting dual-mode.
     """
-    global _llm_instance
-    if _llm_instance is None:
-        from providers.registry import get_llm_provider
-        _llm_instance = get_llm_provider()
-    return _llm_instance
+    from providers.registry import get_llm_provider
+    return get_llm_provider()

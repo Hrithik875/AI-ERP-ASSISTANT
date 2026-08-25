@@ -23,6 +23,10 @@ class OllamaLLMProvider(BaseLLMProvider):
         self.model = OLLAMA_MODEL
         logger.info(f"Ollama LLM Provider initialized (url={self.base_url}, model={self.model})")
 
+    @property
+    def model_id(self) -> str:
+        return self.model
+
     def generate(
         self,
         user_message: str,
