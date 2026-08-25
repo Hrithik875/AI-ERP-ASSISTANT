@@ -108,8 +108,9 @@ CRITICAL INSTRUCTIONS:
 - ONLY output JSON. No markdown backticks, no explanations.
 - Map entities properly: if the user asks for "Aarav M", the `usn` might be required but you might not know it. If a name is provided and USN is needed, you might need to use `action: search` to find the USN first, or pass it if you know it.
 - If the user refers to a course or student from the conversation history (e.g., "which one has lowest attendance in that course?", "what about CS601?", "how many more classes does he need?"), extract the course_code or usn/name from the history!
-- If you can't figure it out, use the StudentTool search action or FacultyTool search action.
-- If it's an attendance query or attendance calculation/risk query, use AttendanceTool.
+- If the user asks how many classes a student needs to attend to reach 75%/85%, use AttendanceTool with action: 'calculate_classes_needed', usn/name, and target_pct.
+- If the user asks how many classes a student can miss/bunk safely, use AttendanceTool with action: 'calculate_classes_can_miss', usn/name, and target_pct.
+- If it's an attendance query or attendance risk query, use AttendanceTool.
 - If it's grades, use GradesTool.
 - If it's timetable, use TimetableTool.
 - If it's courses, use CourseTool.
