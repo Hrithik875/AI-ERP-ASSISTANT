@@ -9,6 +9,29 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+export interface SystemServiceStatus {
+  status: "ok" | "error" | "degraded";
+  latency_ms?: number;
+  provider?: string;
+  model?: string;
+  fast_model?: string;
+  fast_model_downloaded?: boolean;
+  error?: string;
+}
+
+export interface SystemStatus {
+  mode: string;
+  services: {
+    mysql?: SystemServiceStatus;
+    qdrant?: SystemServiceStatus;
+    llm?: SystemServiceStatus;
+    stt?: SystemServiceStatus;
+    tts?: SystemServiceStatus;
+  };
+  overall: "ok" | "degraded" | "error";
+  timestamp: string;
+}
+
 export interface ChatTurn {
   role: "user" | "assistant";
   content: string;
@@ -203,6 +226,125 @@ export async function sendChatMessage(
         "Sorry, I'm unable to connect to the backend. Please ensure the server is running and try again.",
       timestamp: new Date(),
     };
+  }
+}
+
+/**
+ * Stream a chat response via SSE (/chat/stream).
+ *
+ * Calls `onToken` for each token string as it arrives.
+ * Calls `onDone` with the completed ChatMessage when the [DONE] event fires.
+ * Calls `onError` if a network or server error occurs.
+ *
+ * Returns an AbortController so the caller can cancel the stream.
+ */
+export function streamChatMessage(
+  message: string,
+  history: ChatTurn[],
+  onToken: (token: string) => void,
+  onDone: (msg: ChatMessage) => void,
+  onError: (err: string) => void
+): AbortController {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/chat/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        onError(err.detail || `Stream request failed: ${res.status}`);
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) {
+        onError("ReadableStream not supported");
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        // Keep the last (possibly incomplete) line in the buffer
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6); // strip "data: "
+
+          if (payload.startsWith("[DONE]")) {
+            try {
+              const meta = JSON.parse(payload.slice(7)); // strip "[DONE] "
+              onDone({
+                id: meta.id || Date.now().toString(),
+                role: "assistant",
+                content: "", // content was built progressively via onToken
+                timestamp: new Date(),
+                query_type: meta.query_type,
+                source: meta.source,
+                tool_used: meta.tool_used,
+                sources: meta.sources,
+              });
+            } catch {
+              onDone({
+                id: Date.now().toString(),
+                role: "assistant",
+                content: "",
+                timestamp: new Date(),
+              });
+            }
+            return;
+          }
+
+          if (payload.startsWith("[ERROR]")) {
+            const errJson = payload.slice(8);
+            try {
+              const e = JSON.parse(errJson);
+              onError(e.error || "Unknown streaming error");
+            } catch {
+              onError(errJson);
+            }
+            return;
+          }
+
+          // Regular token — unescape \n back to newlines
+          const token = payload.replace(/\\n/g, "\n");
+          onToken(token);
+        }
+      }
+    } catch (err: any) {
+      if (err?.name === "AbortError") return; // cancelled
+      console.error("Stream error:", err);
+      onError(err?.message || "Streaming failed");
+    }
+  })();
+
+  return controller;
+}
+
+/**
+ * Fetch the deep system-status health check.
+ */
+export async function fetchSystemStatus(): Promise<SystemStatus | null> {
+  try {
+    const res = await fetch(`${API_BASE}/system-status`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn("system-status unavailable:", err);
+    return null;
   }
 }
 

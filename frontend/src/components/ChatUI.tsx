@@ -6,7 +6,8 @@ import { Send, Bot, User, Loader2, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
-import { ChatMessage, sendChatMessage } from "@/lib/api";
+import { ChatMessage, sendChatMessage, streamChatMessage } from "@/lib/api";
+import StatusPanel from "@/components/StatusPanel";
 
 export interface ChatUIHandle {
   addTranscript: (text: string, response: string) => void;
@@ -92,37 +93,79 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
       timestamp: new Date(),
     };
 
+    const tempAiId = (Date.now() + 1).toString();
+    const tempAiMsg: ChatMessage = {
+      id: tempAiId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    };
+
     // Extract bounded prior history (up to last MAX_HISTORY_TURNS messages)
     const history = messages.slice(-MAX_HISTORY_TURNS).map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg, tempAiMsg]);
     setInput("");
     setIsLoading(true);
 
-    try {
-      const response = await sendChatMessage(userMsg.content, history);
-      setMessages((prev) => [...prev, response]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          role: "assistant",
-          content: "Sorry, I encountered an error. Please try again.",
-          timestamp: new Date(),
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
-      inputRef.current?.focus();
-    }
+    streamChatMessage(
+      userMsg.content,
+      history,
+      (token) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempAiId ? { ...m, content: m.content + token } : m
+          )
+        );
+      },
+      (finalMsg) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempAiId
+              ? {
+                  ...m,
+                  ...finalMsg,
+                  content: m.content || finalMsg.content,
+                }
+              : m
+          )
+        );
+        setIsLoading(false);
+        inputRef.current?.focus();
+      },
+      (err) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempAiId
+              ? {
+                  ...m,
+                  content:
+                    m.content ||
+                    "Sorry, I encountered an error communicating with the assistant. Please try again.",
+                }
+              : m
+          )
+        );
+        setIsLoading(false);
+        inputRef.current?.focus();
+      }
+    );
   };
 
   return (
     <div className="relative flex flex-col h-full w-full overflow-hidden">
+      {/* Top Observability Bar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border/40 bg-card/30 backdrop-blur-sm z-20">
+        <div className="flex items-center gap-2">
+          <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
+          <span className="text-xs font-medium text-muted-foreground">AI ERP Assistant</span>
+        </div>
+        <StatusPanel />
+      </div>
+
       {/* Messages */}
       <div
         ref={scrollRef}
@@ -199,6 +242,20 @@ const ChatUI = forwardRef<ChatUIHandle, ChatUIProps>(function ChatUI(
                     >
                       {msg.content}
                     </ReactMarkdown>
+                  </div>
+                )}
+                {msg.role === "assistant" && (msg.tool_used || (msg.sources && msg.sources.length > 0)) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40 mt-2">
+                    {msg.tool_used && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-mono font-medium">
+                        Tool: {msg.tool_used}
+                      </span>
+                    )}
+                    {msg.sources && msg.sources.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-mono">
+                        Sources: {msg.sources.map(s => s.filename + (s.page ? ` (p.${s.page})` : '')).join(", ")}
+                      </span>
+                    )}
                   </div>
                 )}
                 <p
