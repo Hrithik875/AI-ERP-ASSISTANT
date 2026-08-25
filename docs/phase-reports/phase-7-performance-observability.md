@@ -210,20 +210,66 @@ tests/test_voice.py ....................                                [ 81%]
 
 ---
 
-## 5. Demo-Day Latency Mitigation & Operational Protocol
+## 5. Root-Cause Diagnostic Follow-Up & Final Latency Optimization
 
-> [!IMPORTANT]
-> **Hard Floor of CPU-Only Inference:**
-> Local CPU inference has a fundamental mathematical ceiling: on standard x86 CPU cores without dedicated GPU tensor cores, a 7B parameter model produces ~8–12 tokens/second. A full ERP compound query requires ~21–27 seconds wall-clock time across its pipeline stages (routing extraction + DB execution + Markdown answer formatting). 
-> 
-> **Server-Sent Events (SSE) Streaming** solves this for user perception by delivering the first token within **~10 seconds** (immediately following tool execution) and streaming output smoothly across the screen rather than presenting 25+ seconds of blank screen.
+### Empirical Investigation of Extraction Latency
 
-### Mandatory Live Demo Checklist:
+A diagnostic investigation was conducted to determine why `qwen2.5:3b-instruct` showed elevated response times (~29s) during initial Phase 7 profiling despite pre-warming.
 
-1. **Pre-Warm Models Prior to Stage Presentation:**
-   - The backend server now automatically pre-warms both `qwen2.5:3b-instruct` and `qwen2.5:7b-instruct` on startup with `keep_alive: 10m`.
-   - Start the backend and Ollama server at least **10 minutes before the live demo** to ensure all weights reside in RAM and avoid any cold-load penalty on stage.
+#### System Memory & Resource Snapshot (Measured Live):
+- **Host Hardware:** 13th Gen Intel Core i7-1360P (12 cores: 4 P-cores + 8 E-cores, 16 logical processors).
+- **Physical RAM:** 15.69 GB total, with **~5.31 GB available** (OS, IDE, web views, Docker, and background services utilizing ~10.38 GB).
+- **Ollama Model Footprint in Dual-Model Residency:**
+  - `qwen2.5:7b-instruct`: 5.1 GB
+  - `qwen2.5:3b-instruct`: 2.2 GB
+  - **Combined Model Memory:** **7.30 GB**
 
-2. **Use Validated Evaluation Queries:**
-   - Stick to the canonical, validated queries from the Phase 4/5 evaluation matrix during live panel demonstrations (e.g. `"Show me attendance for CS601"`, `"Which student has lowest attendance?"`, `"What is the condonation fee?"`). These queries have verified deterministic response times and proven routing paths.
+```
+Memory Allocation Impact (Dual-Model Resident):
+Physical RAM Available:  5.31 GB
+Model Memory Required:   7.30 GB
+Oversubscription:       -1.99 GB  --> Triggers Windows Working Set Trimming & Disk Swapping
+MemCompression:          409 MB  ->  988 MB (+141% spike)
+Pagefile (pagefile.sys): 4.65 GB ->  5.85 GB (+1.20 GB swapped to NVMe disk)
+```
+
+#### The Root Cause:
+When both `3b` and `7b` were kept simultaneously resident with `keep_alive: 10m`, total model memory exceeded physical available RAM. Windows memory manager compressed and paged out the inactive model's weights to `pagefile.sys`. When a user query arrived, loading and uncompressing the 2.2 GB 3B model weights generated **~20–25s of page fault / disk paging delay** before prompt evaluation could begin.
+
+Additionally, `local_llm.py` previously omitted explicit `num_thread` and `num_ctx` request options, causing Ollama to allocate a 4096-token KV cache and reload inference runners when switching parameters.
+
+#### Applied Optimizations:
+1. **Explicit CPU Core Threading & Context Window Tuning:**
+   - Configured `num_thread = 12` (matching the 12 physical CPU cores of the i7-1360P) in `backend/config.py` (`OLLAMA_NUM_THREADS`) and `backend/providers/llm/local_llm.py`.
+   - Configured `num_ctx = 2048` (`OLLAMA_NUM_CTX`), saving ~500 MB of KV cache RAM per model and eliminating runtime runner re-initializations.
+2. **Single-Model Residency by Default:**
+   - Updated `backend/config.py` so `OLLAMA_FAST_MODEL` defaults to `OLLAMA_MODEL` rather than forcing a concurrent second model into memory.
+   - For 16GB CPU local deployments, `qwen2.5:3b-instruct` is set as the active local model in `.env.local` (2.2 GB resident size, leaving >3 GB physical RAM completely free with zero pagefile swapping).
+
+---
+
+## 6. Before vs After Performance Benchmark
+
+Measurements taken via `scripts/measure_latency.py` (3 iterations, warm cache, Intel i7-1360P CPU):
+
+| Metric / Pipeline Stage | Before Optimization (Dual 7B+3B Swapping) | After Optimization (Single 3B Resident + 12 Threads) | Improvement |
+|---|---|---|---|
+| **Ollama Resident RAM** | 7.3 GB (Oversubscribed) | **2.2 GB (Clean in RAM)** | **-70% RAM footprint** |
+| **Pagefile Activity** | High (1.2 GB swapped) | **0 MB swapped (0 disk I/O)** | **Eliminated** |
+| **Tool Dispatch Extraction** | 29,041 ms | **4,903 ms - 5,275 ms** | **83% faster** |
+| **Tool DB Execution** | 239 ms | **11 ms - 32 ms** | Instant |
+| **Answer Formatting** | 29,919 ms | **8,868 ms - 9,582 ms** | **69% faster** |
+| **ERP Query Total (Median)** | **29,177 ms** (spikes to 59s) | **14,500 ms** | **50% - 75% faster** |
+| **RAG Document Query (Median)**| **8,149 ms** | **6,269 ms** | **23% faster** |
+| **First Token (Streaming)** | ~10.7 s | **< 5.3 s** | **50% faster** |
+
+---
+
+## 7. Mandatory Live Demo Protocol
+
+> [!TIP]
+> **Recommended Live Demo Configuration:**
+> - Keep `APP_MODE=local` with `OLLAMA_MODEL=qwen2.5:3b-instruct` and `OLLAMA_FAST_MODEL=qwen2.5:3b-instruct` in `.env.local` for smooth, responsive live demos.
+> - The backend automatically pre-warms the model on startup with `threads=12` and `num_ctx=2048`.
+> - Use the `/chat/stream` SSE interface: first token renders in **< 5.3 seconds**, providing immediate interactive visual feedback to the panel.
 
