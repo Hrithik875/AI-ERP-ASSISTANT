@@ -182,14 +182,22 @@ Do NOT reveal internal IDs or backend details."""
             temperature=0.3
         )
         
-        return answer, f"{tool_name} {params}", sources
+        # Determine tool_used identifier for transparency
+        if selected_tool.name == "AttendanceTool" and params.get("action") in (
+            "calculate_classes_needed", "calculate_classes_can_miss", "classes_needed", "classes_can_miss", "safe_bunks"
+        ):
+            tool_used = "Reasoning (AttendanceTool)"
+        else:
+            tool_used = selected_tool.name
+
+        return answer, f"{tool_name} {params}", sources, tool_used
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse tool JSON: {e} | Raw: {json_resp}")
-        return "I encountered an error understanding your request.", "JSON Decode Error", []
+        return "I encountered an error understanding your request.", "JSON Decode Error", [], "Error"
     except Exception as e:
         logger.error(f"Tool execution failed: {e}")
-        return f"I encountered an error processing your query: {str(e)}", "Execution Error", []
+        return f"I encountered an error processing your query: {str(e)}", "Execution Error", [], "Error"
 
 
 # ── Main Orchestrator ───────────────────────────────────────────────────────
@@ -201,7 +209,7 @@ def process_query(question: str, history: list = None) -> Dict:
 
     try:
         if query_type == "erp":
-            answer, source_info, sources = execute_tool_query(question, history=history)
+            answer, source_info, sources, tool_used = execute_tool_query(question, history=history)
 
         elif query_type == "document":
             sources = []
@@ -224,30 +232,35 @@ def process_query(question: str, history: list = None) -> Dict:
                             context=f"Retrieved Documents:\n{results['context']}",
                         )
                         source_info = "DocumentTool"
+                        tool_used = "DocumentTool"
                     else:
                         # No relevant document found — return explicit fallback
                         answer = results.get("message", "No relevant documents found.")
                         source_info = "DocumentTool (no match)"
+                        tool_used = "DocumentTool (no match)"
                 else:
                     answer = "Document tool not found."
                     source_info = "Missing Tool"
+                    tool_used = "Missing Tool"
             except Exception as e:
                 logger.warning(f"Document tool unavailable: {e}")
                 llm = get_llm()
                 answer = llm.generate(user_message=question)
                 source_info = "Direct LLM"
+                tool_used = "Direct LLM"
 
         else:  # general
             llm = get_llm()
             answer = llm.generate(user_message=question)
             source_info = "Direct LLM"
+            tool_used = "Direct LLM"
             sources = []
 
         elapsed_ms = int((time.time() - start) * 1000)
 
         # Log the query
         try:
-            _log_query(question, query_type, answer, elapsed_ms, source_info)
+            _log_query(question, query_type, answer, elapsed_ms, tool_used)
         except Exception as e:
             logger.warning(f"Failed to log query: {e}")
 
@@ -257,6 +270,7 @@ def process_query(question: str, history: list = None) -> Dict:
             "response_time_ms": elapsed_ms,
             "source_info": source_info,
             "sources": sources,
+            "tool_used": tool_used,
         }
 
     except Exception as e:
@@ -268,6 +282,7 @@ def process_query(question: str, history: list = None) -> Dict:
             "response_time_ms": elapsed_ms,
             "source_info": "Error",
             "sources": [],
+            "tool_used": "Error",
         }
 
 
