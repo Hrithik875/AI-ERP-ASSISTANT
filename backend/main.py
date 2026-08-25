@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from mangum import Mangum
 
-from config import logger, AWS_REGION, S3_BUCKET_NAME, BEDROCK_MODEL_ID, APP_MODE, LOCAL_STORAGE_DIR
+from config import logger, AWS_REGION, S3_BUCKET_NAME, BEDROCK_MODEL_ID, APP_MODE, LOCAL_STORAGE_DIR, ALLOWED_ORIGINS
 
 # ── Import Routes ───────────────────────────────────────────────────────────
 from routes.health    import router as health_router
@@ -96,10 +96,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow frontend (CloudFront) and local dev
+# CORS — allow the configured frontend origins only (never wildcard).
+# Set ALLOWED_ORIGINS env var to a comma-separated list for production.
+# Defaults to http://localhost:3000 (local Next.js dev server).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # TODO: restrict to CloudFront domain in production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
