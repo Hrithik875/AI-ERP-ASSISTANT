@@ -100,3 +100,17 @@ RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
 # ── Polly (TTS) ────────────────────────────────────────────────────────────
 POLLY_VOICE_ID = os.environ.get("POLLY_VOICE_ID", "Joanna")
 POLLY_ENGINE = os.environ.get("POLLY_ENGINE", "neural")  # "standard" or "neural"
+
+# ── Admin Console Security ──────────────────────────────────────────────────
+# Shared secret required in the X-Admin-Key header to access the raw-SQL
+# database admin console (/db/* routes). This does NOT gate the assistant's
+# normal /chat, /voice-query, or student-facing routes — only the admin UI.
+# Change this to a strong random string before any deployment.
+ADMIN_API_KEY = os.environ.get("ADMIN_API_KEY", "change-me-before-deployment")
+
+# ── CORS ────────────────────────────────────────────────────────────────────
+# Comma-separated list of allowed origins. Defaults to local Next.js dev server.
+# In production, set to your CloudFront / frontend domain.
+# Example: ALLOWED_ORIGINS=https://erp.bmsce.ac.in,https://www.erp.bmsce.ac.in
+_raw_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]

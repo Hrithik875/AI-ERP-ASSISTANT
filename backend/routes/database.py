@@ -5,6 +5,10 @@ Provides endpoints for the frontend database management UI:
 - List tables, view/edit/delete rows
 - Execute raw SQL queries
 - Export/Import data (CSV, JSON)
+
+Security: every route in this file is protected by the ADMIN_API_KEY
+shared-secret check (X-Admin-Key request header).  The regular assistant
+routes (/chat, /voice-query, etc.) are intentionally NOT covered here.
 """
 
 import csv
@@ -15,15 +19,43 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from db.connection import get_cursor, execute_query, execute_write
-from config import AURORA_DATABASE
+from config import AURORA_DATABASE, ADMIN_API_KEY
 
 logger = logging.getLogger("erp-assistant")
-router = APIRouter(prefix="/db", tags=["database-console"])
+
+
+# ── Admin authentication dependency ─────────────────────────────────────────
+
+def verify_admin_key(x_admin_key: Optional[str] = Header(default=None)):
+    """
+    FastAPI dependency that enforces the ADMIN_API_KEY shared-secret gate.
+
+    Every route in this router requires a valid X-Admin-Key header.  This
+    protects the raw-SQL admin console (/db/*) from unauthenticated access
+    without affecting the assistant's normal /chat or /voice-query routes.
+
+    Returns 401 if the header is absent or the value does not match.
+    """
+    if not x_admin_key or x_admin_key != ADMIN_API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Unauthorized: X-Admin-Key header is missing or incorrect. "
+                "This endpoint is restricted to database administrators."
+            ),
+        )
+
+
+router = APIRouter(
+    prefix="/db",
+    tags=["database-console"],
+    dependencies=[Depends(verify_admin_key)],
+)
 
 
 # ── Pydantic Models ─────────────────────────────────────────────────────────

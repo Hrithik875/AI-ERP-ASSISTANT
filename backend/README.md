@@ -1,8 +1,8 @@
-# AI ERP Assistant — Backend
+# AI ERP Assistant ï¿½ Backend
 
 FastAPI backend for the AI ERP Assistant. Supports two runtime modes:
-- `APP_MODE=local` — fully offline, Ollama + Piper TTS + faster-whisper + local MySQL + Qdrant
-- `APP_MODE=aws` — AWS production stack (Bedrock + Polly + Transcribe + Aurora + S3 + Lambda)
+- `APP_MODE=local` ï¿½ fully offline, Ollama + Piper TTS + faster-whisper + local MySQL + Qdrant
+- `APP_MODE=aws` ï¿½ AWS production stack (Bedrock + Polly + Transcribe + Aurora + S3 + Lambda)
 
 ---
 
@@ -11,49 +11,49 @@ FastAPI backend for the AI ERP Assistant. Supports two runtime modes:
 ```
 backend/
 +-- ai/
-¦   +-- agent.py            # Main orchestrator: classify ? tool dispatch ? format
-¦   +-- llm_service.py      # Thin wrapper around the provider registry
-¦   +-- embeddings.py       # AWS Bedrock embedding service
-¦   +-- tools/              # One tool class per ERP domain
-¦       +-- attendance_tool.py
-¦       +-- grades_tool.py
-¦       +-- student_tool.py
-¦       +-- faculty_tool.py
-¦       +-- course_tool.py
-¦       +-- timetable_tool.py
-¦       +-- analytics_tool.py
-¦       +-- document_tool.py
+ï¿½   +-- agent.py            # Main orchestrator: classify ? tool dispatch ? format
+ï¿½   +-- llm_service.py      # Thin wrapper around the provider registry
+ï¿½   +-- embeddings.py       # AWS Bedrock embedding service
+ï¿½   +-- tools/              # One tool class per ERP domain
+ï¿½       +-- attendance_tool.py
+ï¿½       +-- grades_tool.py
+ï¿½       +-- student_tool.py
+ï¿½       +-- faculty_tool.py
+ï¿½       +-- course_tool.py
+ï¿½       +-- timetable_tool.py
+ï¿½       +-- analytics_tool.py
+ï¿½       +-- document_tool.py
 +-- db/
-¦   +-- connection.py       # MySQL connection pool helpers
-¦   +-- models.py           # SQLAlchemy table definitions (10 tables)
-¦   +-- seed.py             # Sample BMSCE academic data
-¦   +-- migrate.py          # Schema migration utilities
+ï¿½   +-- connection.py       # MySQL connection pool helpers
+ï¿½   +-- models.py           # SQLAlchemy table definitions (10 tables)
+ï¿½   +-- seed.py             # Sample BMSCE academic data
+ï¿½   +-- migrate.py          # Schema migration utilities
 +-- providers/
-¦   +-- base.py             # Abstract base classes (BaseLLMProvider, BaseTTSProvider, …)
-¦   +-- registry.py         # Factory: returns local or AWS provider based on APP_MODE
-¦   +-- llm/
-¦   ¦   +-- aws_llm.py      # Bedrock (Claude 3 Sonnet)
-¦   ¦   +-- local_llm.py    # Ollama (qwen2.5:7b-instruct)
-¦   +-- tts/
-¦   ¦   +-- aws_tts.py      # Amazon Polly
-¦   ¦   +-- local_tts.py    # Piper TTS (offline, en_US-amy-medium)
-¦   +-- stt/
-¦   ¦   +-- aws_stt.py      # Amazon Transcribe
-¦   ¦   +-- local_stt.py    # faster-whisper (small.en)
-¦   +-- embeddings/
-¦   ¦   +-- aws_embeddings.py   # Bedrock Titan Embeddings V2
-¦   ¦   +-- local_embeddings.py # Ollama (mxbai-embed-large)
-¦   +-- storage/
-¦       +-- aws_storage.py  # Amazon S3
-¦       +-- local_storage.py# Local filesystem (serves via /files/ static mount)
+ï¿½   +-- base.py             # Abstract base classes (BaseLLMProvider, BaseTTSProvider, ï¿½)
+ï¿½   +-- registry.py         # Factory: returns local or AWS provider based on APP_MODE
+ï¿½   +-- llm/
+ï¿½   ï¿½   +-- aws_llm.py      # Bedrock (Claude 3 Sonnet)
+ï¿½   ï¿½   +-- local_llm.py    # Ollama (qwen2.5:7b-instruct)
+ï¿½   +-- tts/
+ï¿½   ï¿½   +-- aws_tts.py      # Amazon Polly
+ï¿½   ï¿½   +-- local_tts.py    # Piper TTS (offline, en_US-amy-medium)
+ï¿½   +-- stt/
+ï¿½   ï¿½   +-- aws_stt.py      # Amazon Transcribe
+ï¿½   ï¿½   +-- local_stt.py    # faster-whisper (small.en)
+ï¿½   +-- embeddings/
+ï¿½   ï¿½   +-- aws_embeddings.py   # Bedrock Titan Embeddings V2
+ï¿½   ï¿½   +-- local_embeddings.py # Ollama (mxbai-embed-large)
+ï¿½   +-- storage/
+ï¿½       +-- aws_storage.py  # Amazon S3
+ï¿½       +-- local_storage.py# Local filesystem (serves via /files/ static mount)
 +-- routes/
-¦   +-- health.py           # GET /health
-¦   +-- chat.py             # POST /chat (text query)
-¦   +-- voice.py            # POST /voice/transcribe, /voice/synthesize, /voice/chat
-¦   +-- analytics.py        # GET /analytics/*
-¦   +-- documents.py        # POST /documents/upload, GET /documents/search
-¦   +-- students.py         # GET /students/*
-¦   +-- database.py         # GET /database/* (raw table queries)
+ï¿½   +-- health.py           # GET /health
+ï¿½   +-- chat.py             # POST /chat (text query)
+ï¿½   +-- voice.py            # POST /voice/transcribe, /voice/synthesize, /voice/chat
+ï¿½   +-- analytics.py        # GET /analytics/*
+ï¿½   +-- documents.py        # POST /documents/upload, GET /documents/search
+ï¿½   +-- students.py         # GET /students/*
+ï¿½   +-- database.py         # GET /database/* (raw table queries)
 +-- piper_voices/           # Auto-downloaded Piper TTS models (git-ignored)
 +-- local_storage/          # TTS audio, uploaded docs (git-ignored)
 +-- config.py               # All environment variable bindings
@@ -148,7 +148,7 @@ tts = get_tts_provider()   # ? LocalTTSProvider (local) or AWSTTSProvider (aws)
 llm = get_llm_provider()   # ? OllamaLLMProvider (local) or AWSLLMProvider (aws)
 ```
 
-All providers implement abstract base classes from `providers/base.py`. Routes import only the registry — never a concrete provider directly — so swapping mode requires only changing `APP_MODE`.
+All providers implement abstract base classes from `providers/base.py`. Routes import only the registry ï¿½ never a concrete provider directly ï¿½ so swapping mode requires only changing `APP_MODE`.
 
 ---
 
@@ -156,9 +156,9 @@ All providers implement abstract base classes from `providers/base.py`. Routes i
 
 Queries flow through `ai/agent.py` in three steps:
 
-1. **Intent Classification** — LLM classifies the query as `erp`, `document`, or `general`
-2. **Tool Dispatch** — For `erp` queries, the LLM picks a tool and extracts parameters (no SQL generation ever happens — only parameterized tool calls). For `document` queries, the DocumentTool performs RAG over Qdrant. For `general`, the LLM answers directly.
-3. **Response Formatting** — The tool''s structured result is passed back to the LLM for natural-language formatting with Markdown tables where appropriate.
+1. **Intent Classification** ï¿½ LLM classifies the query as `erp`, `document`, or `general`
+2. **Tool Dispatch** ï¿½ For `erp` queries, the LLM picks a tool and extracts parameters (no SQL generation ever happens ï¿½ only parameterized tool calls). For `document` queries, the DocumentTool performs RAG over Qdrant. For `general`, the LLM answers directly.
+3. **Response Formatting** ï¿½ The tool''s structured result is passed back to the LLM for natural-language formatting with Markdown tables where appropriate.
 
 Available tools: `AttendanceTool`, `GradesTool`, `StudentTool`, `FacultyTool`, `CourseTool`, `TimetableTool`, `AnalyticsTool`, `DocumentTool`.
 
@@ -190,3 +190,18 @@ python -c "from providers.tts.local_tts import _ensure_voice_model; _ensure_voic
 ```
 
 See `.env.sample` for all required AWS environment variables.
+
+---
+
+## Admin Console Security
+
+The \/db/*\ routes (database management console) require an \X-Admin-Key\ header
+matching the \ADMIN_API_KEY\ value in your \.env\ file.  Missing or incorrect keys
+return **401 Unauthorized**.
+
+This key gates ONLY the admin console -- the assistant's \/chat\, \/voice-query\,
+\/documents\, and tool-based query routes are not affected.
+
+Set \ALLOWED_ORIGINS\ in your \.env\ to the comma-separated list of front-end
+origins that the backend will accept CORS requests from (default: \http://localhost:3000\).
+
