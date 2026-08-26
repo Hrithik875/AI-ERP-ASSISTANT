@@ -123,8 +123,16 @@ RAG_TOP_K = int(os.environ.get("RAG_TOP_K", "5"))
 # Minimum cosine similarity score for a retrieved chunk to be considered relevant.
 # Chunks scoring below this threshold are discarded; if ALL chunks are below it,
 # the pipeline returns a "no relevant document found" signal instead of passing
-# weak matches to the LLM.  Empirically tuned to 0.58 for mxbai-embed-large / Titan.
-RAG_MIN_SCORE = float(os.environ.get("RAG_MIN_SCORE", "0.58"))
+# weak matches to the LLM.
+#
+# Phase 9 retune (2026-08-26):
+# Measured real scores from mxbai-embed-large against bmsce_academic_policies_2026.pdf:
+#   'condonation fee' query:
+#     chunk 1 score=0.5191, chunk 0 score=0.4218, chunk 4 score=0.4172
+# Old threshold 0.58 was tuned for a different document/model combo (Phase 4 data)
+# and was too aggressive — it rejected all results. New threshold 0.45 captures
+# the clearly-relevant top hit (0.5191) while discarding weaker matches (<0.44).
+RAG_MIN_SCORE = float(os.environ.get("RAG_MIN_SCORE", "0.45"))
 
 # ── Polly (TTS) ────────────────────────────────────────────────────────────
 POLLY_VOICE_ID = os.environ.get("POLLY_VOICE_ID", "Joanna")

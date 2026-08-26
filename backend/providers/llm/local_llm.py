@@ -59,17 +59,21 @@ class OllamaLLMProvider(BaseLLMProvider):
     def model_id(self) -> str:
         return self.model
 
-    def _get_options(self, temperature: float) -> dict:
+    def _get_options(self, temperature: float, num_predict: int = 0) -> dict:
         opts = {"temperature": temperature}
         if self.num_threads > 0:
             opts["num_thread"] = self.num_threads
         if self.num_ctx > 0:
             opts["num_ctx"] = self.num_ctx
+        # Phase 9: cap output tokens to prevent runaway generation / fabricated follow-up turns.
+        if num_predict > 0:
+            opts["num_predict"] = num_predict
         return opts
 
     # ── Private call helper ──────────────────────────────────────────────────
 
-    def _call(self, model: str, system: str, user: str, temperature: float) -> str:
+    def _call(self, model: str, system: str, user: str, temperature: float,
+               num_predict: int = 0) -> str:
         """POST to Ollama /api/chat (non-streaming). Returns the response content string."""
         start = time.perf_counter()
         logger.info(f"Ollama HTTP request dispatch -> model='{model}'")
@@ -82,7 +86,7 @@ class OllamaLLMProvider(BaseLLMProvider):
                     {"role": "user", "content": user},
                 ],
                 "stream": False,
-                "options": self._get_options(temperature),
+                "options": self._get_options(temperature, num_predict),
             },
             timeout=self.timeout,
         )
@@ -102,6 +106,8 @@ class OllamaLLMProvider(BaseLLMProvider):
         context: str = "",
         system_prompt: str = "",
         temperature: float = 0.3,
+        # Phase 9: 1024-token cap prevents fabricated follow-up generation.
+        num_predict: int = 1024,
     ) -> str:
         """Generate a response using the full-quality model (OLLAMA_MODEL)."""
         sys_prompt = system_prompt or ERP_SYSTEM_PROMPT
@@ -111,7 +117,7 @@ class OllamaLLMProvider(BaseLLMProvider):
             else user_message
         )
         try:
-            return self._call(self.model, sys_prompt, full_prompt, temperature)
+            return self._call(self.model, sys_prompt, full_prompt, temperature, num_predict)
         except Exception as e:
             logger.error(f"Ollama generation failed: {e}")
             raise
@@ -132,14 +138,15 @@ class OllamaLLMProvider(BaseLLMProvider):
         sys_prompt = system_prompt or ERP_SYSTEM_PROMPT
         logger.info(f"Ollama generate_fast requested -> targeting fast_model='{self.fast_model}'")
         try:
-            return self._call(self.fast_model, sys_prompt, user_message, temperature)
+            # num_predict=512: fast calls produce short JSON, no need for larger cap.
+            return self._call(self.fast_model, sys_prompt, user_message, temperature, 512)
         except Exception as fast_err:
             logger.warning(
                 f"Fast model '{self.fast_model}' failed ({fast_err}); "
                 f"falling back to '{self.model}'"
             )
             try:
-                return self._call(self.model, sys_prompt, user_message, temperature)
+                return self._call(self.model, sys_prompt, user_message, temperature, 512)
             except Exception as e:
                 logger.error(f"Ollama fast generation (with fallback) failed: {e}")
                 raise
@@ -177,6 +184,8 @@ class OllamaLLMProvider(BaseLLMProvider):
         context: str = "",
         system_prompt: str = "",
         temperature: float = 0.3,
+        # Phase 9: 1024-token cap prevents fabricated follow-up generation during streaming.
+        num_predict: int = 1024,
     ) -> Generator[str, None, None]:
         """Stream token chunks from the full-quality model via Ollama streaming API.
 
@@ -199,7 +208,7 @@ class OllamaLLMProvider(BaseLLMProvider):
                         {"role": "user", "content": full_prompt},
                     ],
                     "stream": True,
-                    "options": self._get_options(temperature),
+                    "options": self._get_options(temperature, num_predict),
                 },
                 timeout=self.timeout,
                 stream=True,
