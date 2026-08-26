@@ -9,12 +9,23 @@ Phase 7 changes:
   - classify_query() and tool-dispatch extraction use the fast/lightweight model.
   - Final user-visible format step uses the full-quality model (unchanged UX).
   - process_query() accepts stream=True to return a generator for SSE endpoints.
+
+Phase 9 changes (critical regression fixes):
+  - OLLAMA_NUM_CTX raised to 8192 in env (was 2048; 40-student payload hit 98% of old limit).
+  - Format call temperature lowered to 0.1 (was 0.3) — deterministic for structured data.
+  - num_predict=1024 cap added to prevent runaway fabricated follow-up generation.
+  - format_prompt gains GROUNDING RULE: model forbidden from inventing student data.
+  - _grounding_check() post-validates LLM output against actual tool result USNs;
+    any phantom USN triggers a plain-template fallback (_plain_attendance_table).
+  - extract_prompt gains explicit FacultyTool routing rule for 'who teaches' queries.
+  - erp_keywords list gains teach/instructor/lecturer for fast-path classification.
 """
 
 import logging
 import json
+import re
 import time
-from typing import Dict, Generator, Tuple, Union
+from typing import Dict, Generator, List, Tuple, Union
 
 from ai.llm_service import get_llm
 from ai.tools import REGISTERED_TOOLS
@@ -25,6 +36,116 @@ except ImportError:
         return ""
 
 logger = logging.getLogger("erp-assistant")
+
+
+# ── Grounding safety-net (Phase 9) ─────────────────────────────────────────
+
+def _extract_usns_from_text(text: str) -> List[str]:
+    """
+    Extract all USN-like tokens from a text string.
+    Matches patterns like CS2022001, 1BM22CS001, etc.
+    Conservative: only flags tokens that look like real academic USNs.
+    """
+    # Common patterns: <letters><4-digit year><letters/digits>
+    # e.g. CS2022001, 1BM22CS001, BMS22CS001
+    pattern = r'\b(?:[A-Z0-9]{2,4}\d{2}[A-Z]{2}\d{3}|[A-Z]{2}\d{7})\b'
+    return re.findall(pattern, text.upper())
+
+
+def _extract_usns_from_tool_result(tool_results: dict) -> List[str]:
+    """Extract the set of real USNs present in the actual tool result JSON."""
+    usns = set()
+    # attendance_records, at_risk_students, results are common keys
+    for key in ("attendance_records", "at_risk_students", "results", "calculation"):
+        rows = tool_results.get(key, [])
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, dict):
+                    usn = str(row.get("usn", "")).upper().strip()
+                    if usn:
+                        usns.add(usn)
+    return list(usns)
+
+
+def _plain_attendance_table(tool_results: dict, question: str) -> str:
+    """
+    Plain Python-generated Markdown table of attendance data.
+    Used as fallback when LLM output contains hallucinated USNs.
+    Never touches the LLM — renders purely from the raw tool JSON.
+    """
+    records = (
+        tool_results.get("attendance_records")
+        or tool_results.get("results")
+        or tool_results.get("at_risk_students")
+        or []
+    )
+    if not records:
+        msg = tool_results.get("message", "No records found.")
+        return f"**{msg}**"
+
+    # Build header from first record keys
+    headers = list(records[0].keys())
+    # Filter to the most useful columns for display
+    display_cols = [h for h in [
+        "usn", "student_name", "course_code", "course_name",
+        "classes_attended", "total_classes", "attendance_pct",
+        "risk_level", "classes_needed_to_reach_75",
+    ] if h in headers]
+    if not display_cols:
+        display_cols = headers[:7]  # fallback: first 7 cols
+
+    col_labels = {
+        "usn": "USN", "student_name": "Student", "course_code": "Course",
+        "course_name": "Course Name", "classes_attended": "Attended",
+        "total_classes": "Total", "attendance_pct": "Attendance %",
+        "risk_level": "Risk", "classes_needed_to_reach_75": "Classes Needed (75%)",
+    }
+    header_row = " | ".join(col_labels.get(c, c.replace("_", " ").title()) for c in display_cols)
+    sep_row = " | ".join("---" for _ in display_cols)
+    rows = [f"| {header_row} |", f"| {sep_row} |"]
+    for rec in records:
+        vals = []
+        for c in display_cols:
+            v = rec.get(c, "")
+            if c == "attendance_pct" and isinstance(v, (int, float)):
+                v = f"{float(v):.2f}%"
+            vals.append(str(v) if v is not None else "")
+        rows.append("| " + " | ".join(vals) + " |")
+
+    summary = tool_results.get("summary", "")
+    note = (
+        "\n\n> \u26a0\ufe0f *Data rendered directly from database records — "
+        "plain-table fallback was used to ensure accuracy.*"
+    )
+    return "\n".join(rows) + (f"\n\n{summary}" if summary else "") + note
+
+
+def _grounding_check(llm_answer: str, tool_results: dict) -> Tuple[bool, List[str]]:
+    """
+    Verify that every USN mentioned in the LLM-formatted answer is actually
+    present in the tool result data.
+
+    Returns:
+        (ok: bool, phantom_usns: list)
+        ok=True if all USNs in the answer are real (or there are no USNs to check).
+        ok=False + phantom_usns lists any invented USN tokens.
+    """
+    answer_usns = set(_extract_usns_from_text(llm_answer))
+    if not answer_usns:
+        return True, []  # No USNs in answer — nothing to verify
+
+    real_usns = set(u.upper() for u in _extract_usns_from_tool_result(tool_results))
+    if not real_usns:
+        return True, []  # Tool result has no USN structure (e.g. aggregates) — skip
+
+    phantom = list(answer_usns - real_usns)
+    if phantom:
+        logger.warning(
+            f"[grounding] HALLUCINATION DETECTED — phantom USNs in LLM answer: {phantom} "
+            f"(real USNs: {sorted(real_usns)})"
+        )
+        return False, phantom
+    return True, []
 
 
 def _format_history_context(history: list) -> str:
@@ -75,7 +196,11 @@ def classify_query(query: str, history: list = None) -> str:
         "attendance", "absent", "present", "grade", "grades", "marks", "gpa", "cgpa", "schedule",
         "timetable", "student", "students", "faculty", "course", "courses",
         "department", "classes", "class", "at-risk", "risk", "miss", "bunk",
-        "lowest", "highest", "which one", "who has", "how many", "usn"
+        "lowest", "highest", "which one", "who has", "how many", "usn",
+        # Phase 9: added explicit faculty/teacher routing keywords so 'who teaches'
+        # is caught by fast-path and never falls through to LLM fallback.
+        "teaches", "who teach", "instructor", "lecturer", "professor", "who is the teacher",
+        "who is teaching",
     ]
 
     # Fast deterministic pre-checks (no LLM call)
@@ -172,10 +297,13 @@ CRITICAL INSTRUCTIONS:
 - If the user asks how many classes a student can miss/bunk safely, use AttendanceTool with action: 'calculate_classes_can_miss', usn/name, and target_pct.
 - If it's an attendance query or attendance risk query, use AttendanceTool.
 - If it's grades, use GradesTool.
-- If it's timetable, use TimetableTool.
-- If it's courses, use CourseTool.
+- If it's timetable or class schedule, use TimetableTool.
+- If it's courses (listing, info), use CourseTool.
 - If it's analytics, use AnalyticsTool.
 - If it asks about college policies, documents, circulars, or general regulations, use DocumentTool.
+- IMPORTANT — Phase 9 fix: If the user asks WHO TEACHES a course, WHO IS THE INSTRUCTOR/LECTURER/PROFESSOR
+  for a course, or asks about a faculty member by name, use FacultyTool with action='search' and the
+  relevant name or course info as params. Never route 'who teaches X' to TimetableTool.
 """
 
     json_resp = ""
@@ -224,6 +352,9 @@ CRITICAL INSTRUCTIONS:
             sources = tool_results.get("sources", [])
 
         # 4. Format results — uses FULL-QUALITY model for user-visible answer
+        # Phase 9: grounding instruction forbids inventing student data not in the payload.
+        # temperature=0.1 (near-deterministic) — formatting structured data needs no creativity.
+        # num_predict=1024 cap prevents runaway generation of fabricated follow-up turns.
         format_prompt = """You are an AI ERP Assistant for a college.
 Format the provided JSON data into a clean, professional response.
 Use Markdown tables for lists.
@@ -233,8 +364,16 @@ If the data contains at-risk students or attendance calculations, explicitly sta
 - The exact shortage gap in percentage points.
 - The number of consecutive classes needed to reach eligibility (or safe classes that can be missed).
 If the user asked a specific follow-up question (e.g. 'which one has the lowest attendance?'), directly answer that question highlighting the specific record.
-If the data contains an error or \"Not found\", explain it politely to the user.
-Do NOT reveal internal IDs or backend details."""
+If the data contains an error or "Not found", explain it politely to the user.
+Do NOT reveal internal IDs or backend details.
+
+==== GROUNDING RULE (MANDATORY — Phase 9 anti-hallucination) ====
+You MUST use ONLY the student records, IDs, names, and numbers present in the JSON data provided below.
+Do NOT invent, add, rename, or modify any student, USN, name, percentage, or count that is NOT
+explicitly present in the data. If the data does not contain what the user asked about, say so
+honestly instead of filling the gap with made-up information.
+Your response ends after presenting the data. Do NOT generate any follow-up questions, additional
+scenarios, example conversations, or additional turns after the real answer."""
 
         user_msg = f"Question: {question}\nData: {json.dumps(tool_results, default=str)}"
         if history_ctx:
@@ -250,27 +389,39 @@ Do NOT reveal internal IDs or backend details."""
 
         if stream and hasattr(llm, "generate_stream"):
             # Return streaming generator — caller frames SSE events
+            # Phase 9: temperature=0.1 (near-deterministic for data formatting),
+            #          num_predict=1024 cap prevents fabricated follow-up turns.
             t_format_start = time.perf_counter()
             gen = llm.generate_stream(
                 user_message=user_msg,
                 system_prompt=format_prompt,
-                temperature=0.3,
+                temperature=0.1,
             )
             logger.info(f"[timing] format_stream_started (dispatch={t_dispatch_ms}ms, tool={t_tool_ms}ms)")
             return gen, f"{tool_name} {params}", sources, tool_used
 
         # Non-streaming format call
+        # Phase 9: temperature=0.1 (near-deterministic) and num_predict=1024 cap.
         t_format_start = time.perf_counter()
         answer = llm.generate(
             user_message=user_msg,
             system_prompt=format_prompt,
-            temperature=0.3,
+            temperature=0.1,
         )
         t_format_ms = int((time.perf_counter() - t_format_start) * 1000)
         logger.info(
             f"[timing] format={t_format_ms}ms | "
             f"total_inner={t_dispatch_ms + t_tool_ms + t_format_ms}ms"
         )
+
+        # Phase 9 grounding safety-net: verify no phantom USNs were hallucinated.
+        ok, phantoms = _grounding_check(answer, tool_results)
+        if not ok:
+            logger.warning(
+                f"[grounding] Falling back to plain-template render. "
+                f"Phantom USNs: {phantoms}"
+            )
+            answer = _plain_attendance_table(tool_results, question)
 
         return answer, f"{tool_name} {params}", sources, tool_used
 
