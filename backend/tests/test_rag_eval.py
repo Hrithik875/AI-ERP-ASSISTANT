@@ -195,7 +195,7 @@ class TestRAGEvalCase3OutOfDomain:
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Case 4 — Borderline / weak match (superficial keyword overlap)
-# Scores: 0.5504, 0.4200 → all below 0.58 → should be suppressed
+# Scores: 0.4200, 0.3800 → all below 0.45 → should be suppressed
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestRAGEvalCase4BorderlineMatch:
@@ -205,9 +205,9 @@ class TestRAGEvalCase4BorderlineMatch:
         from ai.rag_pipeline import RAGPipeline
 
         mock_hits = [
-            _make_hit(0.5504, "bmsce_academic_policies_2026.pdf", 3,
+            _make_hit(0.4200, "bmsce_academic_policies_2026.pdf", 3,
                       "BMSCE facilities include gymnasium and sports complex."),
-            _make_hit(0.4200, "bmsce_academic_policies_2026.pdf", 1,
+            _make_hit(0.3800, "bmsce_academic_policies_2026.pdf", 1,
                       "BMSCE Section 4 covers student recreational facilities."),
         ]
 
@@ -227,11 +227,11 @@ class TestRAGEvalCase4BorderlineMatch:
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Case 5 — Partial match (one chunk above threshold, others below)
-# Scores: 0.6322, 0.5100 → only 0.6322 passes → exactly 1 source returned
+# Scores: 0.6322, 0.3900 → only 0.6322 passes (>= 0.45) → exactly 1 source returned
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestRAGEvalCase5PartialMatch:
-    """Case 5 (new): Only some chunks pass the threshold — verify filtering is per-chunk."""
+    """Case 5: Only some chunks pass the threshold — verify filtering is per-chunk."""
 
     def test_partial_match_returns_only_above_threshold_chunks(self):
         from ai.rag_pipeline import RAGPipeline
@@ -239,7 +239,7 @@ class TestRAGEvalCase5PartialMatch:
         mock_hits = [
             _make_hit(0.6322, "bmsce_academic_policies_2026.pdf", 1,
                       "Condonation fee for attendance between 75% and 84% is INR 1000 per course."),
-            _make_hit(0.5100, "bmsce_academic_policies_2026.pdf", 2,
+            _make_hit(0.3900, "bmsce_academic_policies_2026.pdf", 2,
                       "Students below 75% will not be eligible to sit for examinations."),
         ]
 
@@ -254,7 +254,7 @@ class TestRAGEvalCase5PartialMatch:
             result = rag.search_with_sources("condonation fee for low attendance")
 
         assert result["has_relevant_results"] is True
-        # Only 1 source should remain (score 0.6322 ≥ 0.58, score 0.5100 < 0.58)
+        # Only 1 source should remain (score 0.6322 >= 0.45, score 0.3900 < 0.45)
         assert len(result["sources"]) == 1
         assert result["sources"][0]["score"] == pytest.approx(0.6322, rel=1e-3)
         assert result["sources"][0]["page"] == 1
