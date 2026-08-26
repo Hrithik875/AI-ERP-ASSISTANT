@@ -352,3 +352,7 @@ def pytest_configure(config):
         "integration: marks tests as integration tests that require a running local stack "
         "(MySQL + Qdrant + Ollama + backend). Skipped by default. Run with: pytest -m integration",
     )
+    config.addinivalue_line(
+        "markers",
+        "regression9: marks Phase 9 regression tests for critical hallucination and routing bug fixes.",
+    )
