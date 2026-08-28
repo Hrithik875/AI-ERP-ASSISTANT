@@ -274,6 +274,8 @@ def execute_tool_query(
     tools_str = "\n\n".join(tools_info)
 
     # 2. Extract tool intent and parameters via FAST model
+    # Phase 10: extract_prompt rebuilt with explicit AttendanceTool vs TimetableTool
+    # disambiguation rules, few-shot examples, and AnalyticsTool valid-actions-only constraint.
     extract_prompt = f"""You are an intelligent router for an Academic ERP system.
 Available tools:
 {tools_str}
@@ -295,15 +297,50 @@ CRITICAL INSTRUCTIONS:
 - If the user refers to a course or student from the conversation history (e.g., \"which one has lowest attendance in that course?\", \"what about CS601?\", \"how many more classes does he need?\"), extract the course_code or usn/name from the history!
 - If the user asks how many classes a student needs to attend to reach 75%/85%, use AttendanceTool with action: 'calculate_classes_needed', usn/name, and target_pct.
 - If the user asks how many classes a student can miss/bunk safely, use AttendanceTool with action: 'calculate_classes_can_miss', usn/name, and target_pct.
-- If it's an attendance query or attendance risk query, use AttendanceTool.
-- If it's grades, use GradesTool.
-- If it's timetable or class schedule, use TimetableTool.
-- If it's courses (listing, info), use CourseTool.
-- If it's analytics, use AnalyticsTool.
+- If it's grades, use GradesTool with the documented actions: 'student_grades', 'course_grades', 'top_performers', 'failing_students'.
+- If it's courses (listing, info), use CourseTool with documented actions: 'search', 'details', 'statistics'.
 - If it asks about college policies, documents, circulars, or general regulations, use DocumentTool.
-- IMPORTANT — Phase 9 fix: If the user asks WHO TEACHES a course, WHO IS THE INSTRUCTOR/LECTURER/PROFESSOR
-  for a course, or asks about a faculty member by name, use FacultyTool with action='search' and the
-  relevant name or course info as params. Never route 'who teaches X' to TimetableTool.
+
+ATTENDANCE vs TIMETABLE DISAMBIGUATION (Phase 10 — critical fix):
+- Words "attendance", "attended", "present", "absent", "risk", "at-risk", "bunk", "miss classes" = AttendanceTool.
+  * "Show me attendance for CS601" -> AttendanceTool, action='course_summary', course_code='CS601'
+  * "Which students are at attendance risk in CS601?" -> AttendanceTool, action='risk_list', course_code='CS601'
+  * "How many classes has Aarav attended?" -> AttendanceTool, action='student_summary', name='Aarav'
+- Words "schedule", "timetable", "when does class meet", "what time", "which room", "classes on Monday" = TimetableTool.
+  * "What is the timetable for CS601?" -> TimetableTool, action='course_schedule', course_code='CS601'
+  * "Show me the schedule for Monday" -> TimetableTool, action='day_schedule', day='Monday'
+- NEVER route attendance queries to TimetableTool. NEVER route timetable/schedule queries to AttendanceTool.
+
+ANALYTICS TOOL — VALID ACTIONS ONLY (Phase 10 — critical fix):
+- AnalyticsTool only implements TWO actions: 'department_performance' and 'overall_stats'.
+- "How many departments are there?" / "List all departments" -> AnalyticsTool, action='department_performance'
+  (department_performance returns all departments with their stats including count)
+- "Overall stats / counts of students, faculty, courses" -> AnalyticsTool, action='overall_stats'
+- NEVER use action='department_list' or any other action not in this list — it does not exist and will error.
+
+FACULTY ROUTING (Phase 9 fix):
+- If the user asks WHO TEACHES a course, WHO IS THE INSTRUCTOR/LECTURER/PROFESSOR for a course,
+  or asks about a faculty member by name, use FacultyTool with action='by_course' (with course_code)
+  or action='search' (with name). Never route 'who teaches X' to TimetableTool.
+
+FEW-SHOT EXAMPLES (follow these exactly for similar queries):
+Q: "Show me attendance for CS601"
+A: {{"tool_name": "AttendanceTool", "params": {{"action": "course_summary", "course_code": "CS601"}}}}
+
+Q: "Which students are at risk in CS601?"
+A: {{"tool_name": "AttendanceTool", "params": {{"action": "risk_list", "course_code": "CS601"}}}}
+
+Q: "What is the timetable for CS601?"
+A: {{"tool_name": "TimetableTool", "params": {{"action": "course_schedule", "course_code": "CS601"}}}}
+
+Q: "How many departments are there? List them"
+A: {{"tool_name": "AnalyticsTool", "params": {{"action": "department_performance"}}}}
+
+Q: "Give me overall stats"
+A: {{"tool_name": "AnalyticsTool", "params": {{"action": "overall_stats"}}}}
+
+Q: "Who teaches CS601?"
+A: {{"tool_name": "FacultyTool", "params": {{"action": "by_course", "course_code": "CS601"}}}}
 """
 
     json_resp = ""
