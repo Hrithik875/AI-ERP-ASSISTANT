@@ -504,81 +504,29 @@ def execute_tool_query(
         if history_ctx else ""
     )
 
-    # 1. Build tool definitions
-    tools_info = []
-    for t in REGISTERED_TOOLS:
-        tools_info.append(f"Tool: {t.name}\nDescription: {t.description}\nParameters: {json.dumps(t.parameters)}")
-    tools_str = "\n\n".join(tools_info)
+    # 1. Build compact tool definitions (Phase 10: compact schema cuts extraction prompt from 4.8k chars to 1.5k chars)
+    tools_str = """- AttendanceTool: student_summary(usn/name), course_summary(course_code), risk_list(course_code?), calculate_classes_needed(usn/name, target_pct), calculate_classes_can_miss(usn/name, target_pct)
+- AnalyticsTool: department_performance(department?), overall_stats()
+- TimetableTool: course_schedule(course_code), day_schedule(day), faculty_schedule(employee_code)
+- FacultyTool: by_course(course_code), search(name/department), profile(employee_code), workload(employee_code)
+- GradesTool: student_grades(usn), course_grades(course_code), top_performers(course_code), failing_students(course_code)
+- StudentTool: profile(usn), search(name/department/semester)
+- CourseTool: search(department?), details(course_code), statistics(course_code)
+- DocumentTool: college policies, syllabus, regulations"""
 
     # 2. Extract tool intent and parameters via FAST model
-    # Phase 10: extract_prompt rebuilt with explicit AttendanceTool vs TimetableTool
-    # disambiguation rules, few-shot examples, and AnalyticsTool valid-actions-only constraint.
-    extract_prompt = f"""You are an intelligent router for an Academic ERP system.
-Available tools:
+    extract_prompt = f"""You are an ERP router. Output ONLY valid JSON: {{"tool_name": "ToolName", "params": {{"action": "action_name", "key": "val"}}}}
+
+TOOLS:
 {tools_str}
-
-Analyze the user's question (and recent conversation history if it is a follow-up) and select the most appropriate tool and the necessary parameters.
 {history_section}
-Respond ONLY with a valid JSON object matching this schema:
-{{
-  "tool_name": "NameOfTheTool",
-  "params": {{
-    "action": "action_name",
-    "param1": "value1"
-  }}
-}}
-
-CRITICAL INSTRUCTIONS:
-- ONLY output JSON. No markdown backticks, no explanations.
-- Map entities properly: if the user asks for \"Aarav M\", the `usn` might be required but you might not know it. If a name is provided and USN is needed, you might need to use `action: search` to find the USN first, or pass it if you know it.
-- If the user refers to a course or student from the conversation history (e.g., \"which one has lowest attendance in that course?\", \"what about CS601?\", \"how many more classes does he need?\"), extract the course_code or usn/name from the history!
-- If the user asks how many classes a student needs to attend to reach 75%/85%, use AttendanceTool with action: 'calculate_classes_needed', usn/name, and target_pct.
-- If the user asks how many classes a student can miss/bunk safely, use AttendanceTool with action: 'calculate_classes_can_miss', usn/name, and target_pct.
-- If it's grades, use GradesTool with the documented actions: 'student_grades', 'course_grades', 'top_performers', 'failing_students'.
-- If it's courses (listing, info), use CourseTool with documented actions: 'search', 'details', 'statistics'.
-- If it asks about college policies, documents, circulars, or general regulations, use DocumentTool.
-
-ATTENDANCE vs TIMETABLE DISAMBIGUATION (Phase 10 — critical fix):
-- Words "attendance", "attended", "present", "absent", "risk", "at-risk", "bunk", "miss classes" = AttendanceTool.
-  * "Show me attendance for CS601" -> AttendanceTool, action='course_summary', course_code='CS601'
-  * "Which students are at attendance risk in CS601?" -> AttendanceTool, action='risk_list', course_code='CS601'
-  * "How many classes has Aarav attended?" -> AttendanceTool, action='student_summary', name='Aarav'
-- Words "schedule", "timetable", "when does class meet", "what time", "which room", "classes on Monday" = TimetableTool.
-  * "What is the timetable for CS601?" -> TimetableTool, action='course_schedule', course_code='CS601'
-  * "Show me the schedule for Monday" -> TimetableTool, action='day_schedule', day='Monday'
-- NEVER route attendance queries to TimetableTool. NEVER route timetable/schedule queries to AttendanceTool.
-
-ANALYTICS TOOL — VALID ACTIONS ONLY (Phase 10 — critical fix):
-- AnalyticsTool only implements TWO actions: 'department_performance' and 'overall_stats'.
-- "How many departments are there?" / "List all departments" -> AnalyticsTool, action='department_performance'
-  (department_performance returns all departments with their stats including count)
-- "Overall stats / counts of students, faculty, courses" -> AnalyticsTool, action='overall_stats'
-- NEVER use action='department_list' or any other action not in this list — it does not exist and will error.
-
-FACULTY ROUTING (Phase 9 fix):
-- If the user asks WHO TEACHES a course, WHO IS THE INSTRUCTOR/LECTURER/PROFESSOR for a course,
-  or asks about a faculty member by name, use FacultyTool with action='by_course' (with course_code)
-  or action='search' (with name). Never route 'who teaches X' to TimetableTool.
-
-FEW-SHOT EXAMPLES (follow these exactly for similar queries):
-Q: "Show me attendance for CS601"
-A: {{"tool_name": "AttendanceTool", "params": {{"action": "course_summary", "course_code": "CS601"}}}}
-
-Q: "Which students are at risk in CS601?"
-A: {{"tool_name": "AttendanceTool", "params": {{"action": "risk_list", "course_code": "CS601"}}}}
-
-Q: "What is the timetable for CS601?"
-A: {{"tool_name": "TimetableTool", "params": {{"action": "course_schedule", "course_code": "CS601"}}}}
-
-Q: "How many departments are there? List them"
-A: {{"tool_name": "AnalyticsTool", "params": {{"action": "department_performance"}}}}
-
-Q: "Give me overall stats"
-A: {{"tool_name": "AnalyticsTool", "params": {{"action": "overall_stats"}}}}
-
-Q: "Who teaches CS601?"
-A: {{"tool_name": "FacultyTool", "params": {{"action": "by_course", "course_code": "CS601"}}}}
-"""
+ROUTING RULES:
+- "attendance", "attended", "absent", "risk", "bunk" -> AttendanceTool. (e.g. "attendance for CS601" -> {{"tool_name":"AttendanceTool","params":{{"action":"course_summary","course_code":"CS601"}}}})
+- "schedule", "timetable", "classes on [day]" -> TimetableTool. (e.g. "timetable for CS601" -> {{"tool_name":"TimetableTool","params":{{"action":"course_schedule","course_code":"CS601"}}}})
+- "departments", "department list", "how many departments", "list them" -> {{"tool_name":"AnalyticsTool","params":{{"action":"department_performance"}}}}
+- "overall stats", "institution count", "total students" -> {{"tool_name":"AnalyticsTool","params":{{"action":"overall_stats"}}}}
+- "who teaches [course]" -> FacultyTool(action='by_course', course_code='...')
+- NEVER route attendance queries to TimetableTool."""
 
     json_resp = ""
     try:

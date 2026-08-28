@@ -34,12 +34,11 @@ class AnalyticsTool(BaseTool):
     def execute(self, params: Dict[str, Any]) -> Any:
         action = params.get("action")
 
-        # Phase 10: alias invalid action='department_list' → 'department_performance'
-        # This is the action the LLM was requesting (from logs: action='department_list')
-        # which does not exist. Silently remap to prevent error responses.
-        if action == "department_list":
+        # Phase 10: alias invalid actions like 'department_list', 'departments', 'list' → 'department_performance'
+        # This catches variations the LLM might output for department listing.
+        if action in ("department_list", "departments", "list_departments", "list", "dept_list"):
             logger.warning(
-                "[AnalyticsTool] LLM requested non-existent action='department_list'; "
+                f"[AnalyticsTool] LLM requested action='{action}'; "
                 "remapping to 'department_performance' (safe fallback)"
             )
             action = "department_performance"
