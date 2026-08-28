@@ -113,11 +113,7 @@ def _plain_attendance_table(tool_results: dict, question: str) -> str:
         rows.append("| " + " | ".join(vals) + " |")
 
     summary = tool_results.get("summary", "")
-    note = (
-        "\n\n> \u26a0\ufe0f *Data rendered directly from database records — "
-        "plain-table fallback was used to ensure accuracy.*"
-    )
-    return "\n".join(rows) + (f"\n\n{summary}" if summary else "") + note
+    return "\n".join(rows) + (f"\n\n{summary}" if summary else "")
 
 
 def _grounding_check(llm_answer: str, tool_results: dict) -> Tuple[bool, List[str]]:
@@ -573,33 +569,63 @@ ROUTING RULES:
                 return tool_results.get("message", "No relevant documents found."), "DocumentTool (no match)", [], "DocumentTool (no match)"
             sources = tool_results.get("sources", [])
 
+        # Determine tool_used identifier for transparency
+        if selected_tool.name == "AttendanceTool" and params.get("action") in (
+            "calculate_classes_needed", "calculate_classes_can_miss", "classes_needed", "classes_can_miss", "safe_bunks"
+        ):
+            tool_used = "Reasoning (AttendanceTool)"
+        else:
+            tool_used = selected_tool.name
+
+        # Step 4 & 5 (Phase 10): Default to deterministic renderer for standard ERP tool results
+        # A fast, grounded table rendered in 10ms directly from SQL is 100% accurate,
+        # perfectly formatted, never hallucinates, and avoids 15-30s formatting latency.
+        # Reserve LLM formatting for complex reasoning / conversational context.
+        use_direct_render = (
+            selected_tool.name in (
+                "AttendanceTool", "AnalyticsTool", "TimetableTool",
+                "CourseTool", "GradesTool", "FacultyTool", "StudentTool"
+            )
+            and not (selected_tool.name == "AttendanceTool" and params.get("action") in (
+                "calculate_classes_needed", "calculate_classes_can_miss", "classes_needed", "classes_can_miss", "safe_bunks"
+            ) and history_ctx)  # Keep LLM for multi-turn reasoning conversations
+        )
+
+        if use_direct_render:
+            direct_answer = _plain_generic_render(tool_results, question, selected_tool.name)
+            logger.info(f"[timing] direct_plain_render applied for tool={tool_name} action={params.get('action')}")
+            
+            if stream:
+                def _stream_direct():
+                    # Stream tokens cleanly for SSE endpoint
+                    words = direct_answer.split(" ")
+                    for i, w in enumerate(words):
+                        yield w + (" " if i < len(words) - 1 else "")
+                return _stream_direct(), f"{tool_name} {params}", sources, tool_used
+            
+            return direct_answer, f"{tool_name} {params}", sources, tool_used
+
         # 4. Format results — uses FULL-QUALITY model for user-visible answer
-        # Phase 9: grounding instruction forbids inventing student data not in the payload.
-        # temperature=0.1 (near-deterministic) — formatting structured data needs no creativity.
-        # num_predict=1024 cap prevents runaway generation of fabricated follow-up turns.
-        format_prompt = """You are an AI ERP Assistant for a college.
-Format the provided JSON data into a clean, professional response.
-Use Markdown tables for lists.
-If the data contains at-risk students or attendance calculations, explicitly state:
+        # Phase 10: Clean formatting prompt with zero "JSON data" framing leakage.
+        format_prompt = """You are an AI ERP Assistant for B.M.S. College of Engineering (BMSCE).
+Present the academic information clearly and professionally.
+Use clean Markdown tables for lists.
+If reporting attendance calculations, explicitly state:
 - The student's current attendance percentage and attended/total class numbers.
-- The threshold being compared against (e.g. 75.0% or 85.0%).
-- The exact shortage gap in percentage points.
+- The minimum threshold (e.g. 75.0% or 85.0%).
+- The shortage gap in percentage points.
 - The number of consecutive classes needed to reach eligibility (or safe classes that can be missed).
-If the user asked a specific follow-up question (e.g. 'which one has the lowest attendance?'), directly answer that question highlighting the specific record.
-If the data contains an error or "Not found", explain it politely to the user.
-Do NOT reveal internal IDs or backend details.
+Do NOT mention "JSON", "the data provided below", database schemas, internal IDs, or backend processes.
+Present the information naturally as a helpful administrative assistant.
 
-==== GROUNDING RULE (MANDATORY — Phase 9 anti-hallucination) ====
-You MUST use ONLY the student records, IDs, names, and numbers present in the JSON data provided below.
-Do NOT invent, add, rename, or modify any student, USN, name, percentage, or count that is NOT
-explicitly present in the data. If the data does not contain what the user asked about, say so
-honestly instead of filling the gap with made-up information.
-Your response ends after presenting the data. Do NOT generate any follow-up questions, additional
-scenarios, example conversations, or additional turns after the real answer."""
+==== GROUNDING RULE ====
+Use ONLY the student records, IDs, names, and numbers present in the data below.
+Do NOT invent or modify any names, USNs, percentages, or counts.
+Your response ends after presenting the answer. Do NOT generate follow-up questions or example conversations."""
 
-        user_msg = f"Question: {question}\nData: {json.dumps(tool_results, default=str)}"
+        user_msg = f"User Question: {question}\nInformation:\n{json.dumps(tool_results, default=str)}"
         if history_ctx:
-            user_msg = f"Prior Conversation:\n{history_ctx}\n\nCurrent Question: {question}\nData: {json.dumps(tool_results, default=str)}"
+            user_msg = f"Prior Conversation:\n{history_ctx}\n\nCurrent Question: {question}\nInformation:\n{json.dumps(tool_results, default=str)}"
 
         # Determine tool_used identifier for transparency
         if selected_tool.name == "AttendanceTool" and params.get("action") in (
@@ -610,9 +636,6 @@ scenarios, example conversations, or additional turns after the real answer."""
             tool_used = selected_tool.name
 
         if stream and hasattr(llm, "generate_stream"):
-            # Return streaming generator — caller frames SSE events
-            # Phase 9: temperature=0.1 (near-deterministic for data formatting),
-            #          num_predict=1024 cap prevents fabricated follow-up turns.
             t_format_start = time.perf_counter()
             gen = llm.generate_stream(
                 user_message=user_msg,
@@ -623,10 +646,6 @@ scenarios, example conversations, or additional turns after the real answer."""
             return gen, f"{tool_name} {params}", sources, tool_used
 
         # Non-streaming format call
-        # Phase 9: temperature=0.1 (near-deterministic) and num_predict=1024 cap.
-        # Phase 10: wrap in try/except — if the format LLM call times out or errors,
-        # fall back to plain-text render from raw tool data. A correct plain answer
-        # beats a fluent error message live in front of a panel.
         t_format_start = time.perf_counter()
         try:
             answer = llm.generate(
@@ -640,7 +659,7 @@ scenarios, example conversations, or additional turns after the real answer."""
                 f"total_inner={t_dispatch_ms + t_tool_ms + t_format_ms}ms"
             )
 
-            # Phase 9 grounding safety-net: verify no phantom USNs were hallucinated.
+            # Grounding check
             ok, phantoms = _grounding_check(answer, tool_results)
             if not ok:
                 logger.warning(

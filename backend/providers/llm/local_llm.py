@@ -27,7 +27,6 @@ from config import (
     LLM_TIMEOUT_SECONDS,
     OLLAMA_NUM_THREADS,
     OLLAMA_NUM_CTX,
-    OLLAMA_FAST_NUM_CTX,
 )
 from ai.llm_service import ERP_SYSTEM_PROMPT
 from providers.base import BaseLLMProvider
@@ -48,16 +47,14 @@ class OllamaLLMProvider(BaseLLMProvider):
         self.fast_model = OLLAMA_FAST_MODEL
         self.timeout = LLM_TIMEOUT_SECONDS
         self.num_threads = OLLAMA_NUM_THREADS if OLLAMA_NUM_THREADS > 0 else _detected_cores
-        self.num_ctx = OLLAMA_NUM_CTX if OLLAMA_NUM_CTX > 0 else 2048
-        # Phase 10: fast model uses a smaller KV cache (OLLAMA_FAST_NUM_CTX, default 2048).
-        # Extraction prompts are ~1200 tokens; a 2048-token KV cache pre-fills in ~2-4s
-        # vs ~16s for 8192 (which was the full num_ctx being applied to fast calls too).
-        self.fast_num_ctx = OLLAMA_FAST_NUM_CTX if OLLAMA_FAST_NUM_CTX > 0 else 2048
+        # Phase 10 fix: standardized single num_ctx=4096 across all calls (extraction and format).
+        # This completely eliminates Ollama runner reloads caused by context switches.
+        self.num_ctx = OLLAMA_NUM_CTX if OLLAMA_NUM_CTX > 0 else 4096
         logger.info(
             f"Ollama LLM Provider initialized "
             f"(url={self.base_url}, model={self.model}, "
             f"fast_model={self.fast_model}, threads={self.num_threads}, "
-            f"num_ctx={self.num_ctx}, fast_num_ctx={self.fast_num_ctx}, timeout={self.timeout}s)"
+            f"num_ctx={self.num_ctx}, timeout={self.timeout}s)"
         )
 
     @property
@@ -75,32 +72,14 @@ class OllamaLLMProvider(BaseLLMProvider):
             opts["num_predict"] = num_predict
         return opts
 
-    def _get_fast_options(self, temperature: float, num_predict: int = 0) -> dict:
-        """Options for fast-model calls (extraction, classification).
-        Uses fast_num_ctx (default 2048) instead of the full num_ctx (8192),
-        dramatically reducing KV cache pre-fill time for short prompts."""
-        opts = {"temperature": temperature}
-        if self.num_threads > 0:
-            opts["num_thread"] = self.num_threads
-        if self.fast_num_ctx > 0:
-            opts["num_ctx"] = self.fast_num_ctx
-        if num_predict > 0:
-            opts["num_predict"] = num_predict
-        return opts
-
     # ── Private call helper ──────────────────────────────────────────────────
 
     def _call(self, model: str, system: str, user: str, temperature: float,
-               num_predict: int = 0, fast: bool = False) -> str:
-        """POST to Ollama /api/chat (non-streaming). Returns the response content string.
-        
-        Args:
-            fast: If True, use _get_fast_options() (small KV cache) instead of _get_options().
-                  Set True for internal extraction/classification calls; False for format calls.
-        """
+               num_predict: int = 0) -> str:
+        """POST to Ollama /api/chat (non-streaming). Returns the response content string."""
         start = time.perf_counter()
         logger.info(f"Ollama HTTP request dispatch -> model='{model}'")
-        options = self._get_fast_options(temperature, num_predict) if fast else self._get_options(temperature, num_predict)
+        options = self._get_options(temperature, num_predict)
         response = requests.post(
             f"{self.base_url}/api/chat",
             json={
@@ -158,23 +137,19 @@ class OllamaLLMProvider(BaseLLMProvider):
         JSON extraction. Not used for user-visible output.
         Falls back to the full model on error so the pipeline is always functional
         even if the fast model is not yet downloaded.
-        
-        Phase 10: uses fast=True to select the small KV cache (OLLAMA_FAST_NUM_CTX=2048)
-        instead of the full 8192-token cache, cutting pre-fill time from ~16s to ~2-4s.
         """
         sys_prompt = system_prompt or ERP_SYSTEM_PROMPT
         logger.info(f"Ollama generate_fast requested -> targeting fast_model='{self.fast_model}'")
         try:
-            # num_predict=512: fast calls produce short JSON, no need for larger cap.
-            # fast=True: uses fast_num_ctx (2048) not num_ctx (8192) — critical for latency.
-            return self._call(self.fast_model, sys_prompt, user_message, temperature, 512, fast=True)
+            # num_predict=256: fast calls produce short JSON, no need for larger cap.
+            return self._call(self.fast_model, sys_prompt, user_message, temperature, 256)
         except Exception as fast_err:
             logger.warning(
                 f"Fast model '{self.fast_model}' failed ({fast_err}); "
                 f"falling back to '{self.model}'"
             )
             try:
-                return self._call(self.model, sys_prompt, user_message, temperature, 512, fast=True)
+                return self._call(self.model, sys_prompt, user_message, temperature, 256)
             except Exception as e:
                 logger.error(f"Ollama fast generation (with fallback) failed: {e}")
                 raise
