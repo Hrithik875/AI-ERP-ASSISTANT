@@ -162,6 +162,243 @@ def _format_history_context(history: list) -> str:
     return "\n".join(formatted)
 
 
+# ── Phase 10: Plain-text templated fallbacks (no LLM) ───────────────────────
+
+def _plain_generic_render(tool_results: dict, question: str, tool_name: str = "") -> str:
+    """
+    Universal plain-text renderer for any tool result.
+    Called when the LLM formatting call times out or fails.
+    Produces correct Markdown output from raw JSON — no LLM involved.
+    A correct plain-text answer beats a fluent error message live in front of a panel.
+    """
+    # --- Check for error in tool result ---
+    if "error" in tool_results:
+        return f"**Error from {tool_name}:** {tool_results['error']}"
+    if "message" in tool_results and not any(
+        k in tool_results for k in (
+            "attendance_records", "at_risk_students", "results", "calculation",
+            "departments", "performance", "overall_stats", "grades", "profile",
+            "schedule", "statistics", "faculty", "course", "top_performers",
+            "failing_students", "workload",
+        )
+    ):
+        return f"**{tool_results['message']}**"
+
+    # --- Dispatch to specific renderers based on result keys ---
+
+    # Attendance: course_summary (statistics block)
+    if "statistics" in tool_results and "course_code" in tool_results:
+        stats = tool_results["statistics"]
+        course = tool_results.get("course_code", "")
+        return (
+            f"**Attendance Summary for {course}**\n\n"
+            f"- Average Attendance: **{stats.get('avg_attendance_pct', 'N/A')}%**\n"
+            f"- Enrolled Students: **{stats.get('enrolled_students', 'N/A')}**"
+        )
+
+    # Attendance: student_summary or risk_list records
+    records = (
+        tool_results.get("attendance_records")
+        or tool_results.get("at_risk_students")
+        or tool_results.get("results")
+        or (tool_results.get("calculation") if isinstance(tool_results.get("calculation"), list) else None)
+    )
+    if records and isinstance(records, list) and records:
+        return _plain_attendance_table(tool_results, question)
+
+    # Analytics: departments list
+    if "departments" in tool_results:
+        depts = tool_results["departments"]
+        total = tool_results.get("total_departments", len(depts))
+        if not depts:
+            return "**No department records found.**"
+        headers = ["Dept Code", "Department", "Students", "Faculty", "Courses", "Avg Attendance", "Avg Marks"]
+        sep = "|".join("---" for _ in headers)
+        rows = ["| " + " | ".join(headers) + " |", "| " + sep + " |"]
+        for d in depts:
+            row = [
+                str(d.get("department_code", "")),
+                str(d.get("department_name", "")),
+                str(d.get("total_students", "")),
+                str(d.get("total_faculty", "")),
+                str(d.get("total_courses", "")),
+                f"{float(d.get('avg_attendance_pct', 0)):.1f}%" if d.get("avg_attendance_pct") is not None else "",
+                f"{float(d.get('avg_marks', 0)):.1f}" if d.get("avg_marks") is not None else "",
+            ]
+            rows.append("| " + " | ".join(row) + " |")
+        return f"**Departments ({total} total)**\n\n" + "\n".join(rows)
+
+    # Analytics: overall_stats
+    if "overall_stats" in tool_results:
+        s = tool_results["overall_stats"]
+        return (
+            f"**Institution Overview**\n\n"
+            f"- Total Students: **{s.get('total_students', 'N/A')}**\n"
+            f"- Total Faculty: **{s.get('total_faculty', 'N/A')}**\n"
+            f"- Total Courses: **{s.get('total_courses', 'N/A')}**\n"
+            f"- Total Departments: **{s.get('total_departments', 'N/A')}**"
+        )
+
+    # Analytics: department_performance (old key)
+    if "performance" in tool_results:
+        perf = tool_results["performance"]
+        if not perf:
+            return "**No department performance data found.**"
+        # Re-wrap and recurse
+        return _plain_generic_render(
+            {"departments": perf, "total_departments": len(perf)}, question, tool_name
+        )
+
+    # Faculty: by_course or search
+    if "faculty" in tool_results:
+        faculty_list = tool_results["faculty"]
+        course_code = tool_results.get("course_code", "")
+        if not faculty_list:
+            return f"**No faculty found for {course_code}.**"
+        lines = [f"**Faculty for {course_code}:**\n"]
+        for f in faculty_list:
+            lines.append(
+                f"- **{f.get('faculty_name', 'N/A')}** — {f.get('designation', '')} ({f.get('department_name', '')})"
+            )
+        return "\n".join(lines)
+
+    # Grades: student_grades
+    if "grades" in tool_results:
+        grades = tool_results["grades"]
+        usn = tool_results.get("usn", "Student")
+        if not grades:
+            return f"**No grade records found for {usn}.**"
+        headers = ["Course", "Name", "IA1", "IA2", "IA3", "Final", "Grade"]
+        sep = "|".join("---" for _ in headers)
+        rows = ["| " + " | ".join(headers) + " |", "| " + sep + " |"]
+        for g in grades:
+            rows.append("| " + " | ".join([
+                str(g.get("course_code", "")),
+                str(g.get("course_name", "")),
+                str(g.get("ia1_marks", "")),
+                str(g.get("ia2_marks", "")),
+                str(g.get("ia3_marks", "")),
+                str(g.get("final_exam_marks", "")),
+                str(g.get("final_grade", "")),
+            ]) + " |")
+        return f"**Grades for {usn}**\n\n" + "\n".join(rows)
+
+    # Schedule / timetable
+    if "schedule" in tool_results:
+        schedule = tool_results["schedule"]
+        if not schedule:
+            return "**No schedule records found.**"
+        headers = list(schedule[0].keys()) if schedule else []
+        display = [h for h in [
+            "day_of_week", "start_time", "end_time", "course_code", "course_name",
+            "faculty_name", "room",
+        ] if h in headers] or headers[:6]
+        sep = "|".join("---" for _ in display)
+        col_labels = {
+            "day_of_week": "Day", "start_time": "Start", "end_time": "End",
+            "course_code": "Course", "course_name": "Course Name",
+            "faculty_name": "Faculty", "room": "Room",
+        }
+        rows = [
+            "| " + " | ".join(col_labels.get(h, h.title()) for h in display) + " |",
+            "| " + sep + " |",
+        ]
+        for s in schedule:
+            rows.append("| " + " | ".join(str(s.get(h, "")) for h in display) + " |")
+        return "**Schedule**\n\n" + "\n".join(rows)
+
+    # Student profile
+    if "profile" in tool_results:
+        p = tool_results["profile"]
+        if not p:
+            return "**No student profile found.**"
+        return (
+            f"**Student Profile**\n\n"
+            f"- USN: **{p.get('usn', 'N/A')}**\n"
+            f"- Name: **{p.get('student_name', 'N/A')}**\n"
+            f"- Department: {p.get('department_name', 'N/A')} ({p.get('department_code', 'N/A')})\n"
+            f"- Semester: {p.get('semester', 'N/A')}, Section: {p.get('section', 'N/A')}\n"
+            f"- CGPA: {p.get('cgpa', 'N/A')}"
+        )
+
+    # Generic: try to render any list-of-dicts as a table
+    for key in ("results", "top_performers", "failing_students"):
+        rows_data = tool_results.get(key)
+        if rows_data and isinstance(rows_data, list) and rows_data:
+            headers = list(rows_data[0].keys())[:8]
+            sep = "|".join("---" for _ in headers)
+            header_line = "| " + " | ".join(h.replace("_", " ").title() for h in headers) + " |"
+            tbl = [header_line, "| " + sep + " |"]
+            for row in rows_data:
+                tbl.append("| " + " | ".join(str(row.get(h, "")) for h in headers) + " |")
+            return f"**Results**\n\n" + "\n".join(tbl)
+
+    # Last resort: dump JSON as code block
+    logger.warning(f"[plain_render] No template matched for tool={tool_name}; dumping raw JSON")
+    return (
+        f"**Raw data from {tool_name}** (plain-text fallback):\n\n"
+        f"```json\n{json.dumps(tool_results, default=str, indent=2)[:2000]}\n```"
+    )
+
+
+def _keyword_fallback_route(question: str) -> tuple:
+    """
+    Keyword-based tool routing fallback for when LLM extraction times out or produces
+    invalid JSON. Covers the most common demo queries.
+
+    Returns (tool_name, params) or (None, None) if no match.
+    Phase 10: Safety net so the demo never shows a generic error for common queries.
+    """
+    q = question.lower()
+    import re
+
+    # Attendance keywords
+    if any(k in q for k in ("attendance", "attended", "present", "absent", "at risk", "at-risk", "bunk")):
+        # Extract course code if present
+        course_match = re.search(r'\b([A-Z]{2,3}\d{3})\b', question.upper())
+        course_code = course_match.group(1) if course_match else None
+        if any(k in q for k in ("risk", "risky", "below", "low")):
+            return "AttendanceTool", {"action": "risk_list", "course_code": course_code}
+        elif course_code:
+            return "AttendanceTool", {"action": "course_summary", "course_code": course_code}
+        else:
+            return "AttendanceTool", {"action": "risk_list"}
+
+    # Department / analytics keywords
+    if any(k in q for k in ("department", "departments", "how many dept")):
+        return "AnalyticsTool", {"action": "department_performance"}
+    if any(k in q for k in ("overall stats", "total students", "total faculty", "how many students",
+                             "how many faculty", "institution")):
+        return "AnalyticsTool", {"action": "overall_stats"}
+
+    # Timetable/schedule keywords
+    if any(k in q for k in ("timetable", "schedule", "when does", "which room", "classes on")):
+        course_match = re.search(r'\b([A-Z]{2,3}\d{3})\b', question.upper())
+        course_code = course_match.group(1) if course_match else None
+        day_match = re.search(
+            r'\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b', q
+        )
+        day = day_match.group(1).capitalize() if day_match else None
+        if course_code:
+            return "TimetableTool", {"action": "course_schedule", "course_code": course_code}
+        if day:
+            return "TimetableTool", {"action": "day_schedule", "day": day}
+
+    # Grades keywords
+    if any(k in q for k in ("grade", "grades", "marks", "gpa", "cgpa", "top performers", "failing")):
+        course_match = re.search(r'\b([A-Z]{2,3}\d{3})\b', question.upper())
+        course_code = course_match.group(1) if course_match else None
+        if "top" in q and course_code:
+            return "GradesTool", {"action": "top_performers", "course_code": course_code}
+        if "fail" in q and course_code:
+            return "GradesTool", {"action": "failing_students", "course_code": course_code}
+        if course_code:
+            return "GradesTool", {"action": "course_grades", "course_code": course_code}
+
+    return None, None
+
+
+
 def _get_fast_llm():
     """Return the LLM provider if it supports generate_fast(); otherwise return the normal LLM.
     Avoids a hard dependency on OllamaLLMProvider in AWS mode (which lacks generate_fast)."""
@@ -439,35 +676,79 @@ scenarios, example conversations, or additional turns after the real answer."""
 
         # Non-streaming format call
         # Phase 9: temperature=0.1 (near-deterministic) and num_predict=1024 cap.
+        # Phase 10: wrap in try/except — if the format LLM call times out or errors,
+        # fall back to plain-text render from raw tool data. A correct plain answer
+        # beats a fluent error message live in front of a panel.
         t_format_start = time.perf_counter()
-        answer = llm.generate(
-            user_message=user_msg,
-            system_prompt=format_prompt,
-            temperature=0.1,
-        )
-        t_format_ms = int((time.perf_counter() - t_format_start) * 1000)
-        logger.info(
-            f"[timing] format={t_format_ms}ms | "
-            f"total_inner={t_dispatch_ms + t_tool_ms + t_format_ms}ms"
-        )
-
-        # Phase 9 grounding safety-net: verify no phantom USNs were hallucinated.
-        ok, phantoms = _grounding_check(answer, tool_results)
-        if not ok:
-            logger.warning(
-                f"[grounding] Falling back to plain-template render. "
-                f"Phantom USNs: {phantoms}"
+        try:
+            answer = llm.generate(
+                user_message=user_msg,
+                system_prompt=format_prompt,
+                temperature=0.1,
             )
-            answer = _plain_attendance_table(tool_results, question)
+            t_format_ms = int((time.perf_counter() - t_format_start) * 1000)
+            logger.info(
+                f"[timing] format={t_format_ms}ms | "
+                f"total_inner={t_dispatch_ms + t_tool_ms + t_format_ms}ms"
+            )
+
+            # Phase 9 grounding safety-net: verify no phantom USNs were hallucinated.
+            ok, phantoms = _grounding_check(answer, tool_results)
+            if not ok:
+                logger.warning(
+                    f"[grounding] Falling back to plain-template render. "
+                    f"Phantom USNs: {phantoms}"
+                )
+                answer = _plain_attendance_table(tool_results, question)
+
+        except Exception as fmt_err:
+            t_format_ms = int((time.perf_counter() - t_format_start) * 1000)
+            logger.warning(
+                f"[fallback] Format LLM call failed after {t_format_ms}ms: {fmt_err}. "
+                f"Falling back to plain-text render for tool={tool_name}."
+            )
+            answer = _plain_generic_render(tool_results, question, tool_name)
 
         return answer, f"{tool_name} {params}", sources, tool_used
 
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse tool JSON: {e} | Raw: {json_resp}")
-        return "I encountered an error understanding your request.", "JSON Decode Error", [], "Error"
+        logger.error(f"Failed to parse tool JSON: {e} | Raw: {json_resp[:200]!r}")
+        # Phase 10: attempt keyword-based fallback routing before giving up.
+        logger.info("[fallback] Attempting keyword-based tool routing after JSON decode error")
+        fb_tool_name, fb_params = _keyword_fallback_route(question)
+        if fb_tool_name:
+            fb_tool = next((t for t in REGISTERED_TOOLS if t.name == fb_tool_name), None)
+            if fb_tool:
+                try:
+                    fb_results = fb_tool.execute(fb_params)
+                    fb_answer = _plain_generic_render(fb_results, question, fb_tool_name)
+                    logger.info(f"[fallback] Keyword-route succeeded: tool={fb_tool_name} params={fb_params}")
+                    return fb_answer, f"fallback:{fb_tool_name}", [], fb_tool_name
+                except Exception as fb_err:
+                    logger.error(f"[fallback] Keyword-route execution also failed: {fb_err}")
+        return (
+            "I had trouble understanding that request. Please try rephrasing it.",
+            "JSON Decode Error", [], "Error"
+        )
     except Exception as e:
         logger.error(f"Tool execution failed: {e}")
-        return f"I encountered an error processing your query: {str(e)}", "Execution Error", [], "Error"
+        # Phase 10: if we have a tool result in progress, try to render it plain.
+        # Otherwise fall back to keyword routing.
+        fb_tool_name, fb_params = _keyword_fallback_route(question)
+        if fb_tool_name:
+            fb_tool = next((t for t in REGISTERED_TOOLS if t.name == fb_tool_name), None)
+            if fb_tool:
+                try:
+                    fb_results = fb_tool.execute(fb_params)
+                    fb_answer = _plain_generic_render(fb_results, question, fb_tool_name)
+                    logger.info(f"[fallback] Exception-route succeeded: tool={fb_tool_name}")
+                    return fb_answer, f"fallback:{fb_tool_name}", [], fb_tool_name
+                except Exception as fb_err:
+                    logger.error(f"[fallback] Exception-route execution also failed: {fb_err}")
+        return (
+            f"I encountered an error processing your query. Please try again.",
+            "Execution Error", [], "Error"
+        )
 
 
 # ── Main Orchestrator ───────────────────────────────────────────────────────
