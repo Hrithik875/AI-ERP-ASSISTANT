@@ -75,6 +75,10 @@ LOCAL_SERVER_URL = os.environ.get("LOCAL_SERVER_URL", "http://localhost:8000")
 # CPU Threading & Context options for Ollama local inference
 OLLAMA_NUM_THREADS = int(os.environ.get("OLLAMA_NUM_THREADS", "0"))  # 0 = auto-detect physical cores
 OLLAMA_NUM_CTX = int(os.environ.get("OLLAMA_NUM_CTX", "2048"))  # avoids bloated 4096 KV cache
+# Separate context window for fast extraction/classification calls.
+# These only need ~1200 tokens; a smaller KV cache dramatically cuts pre-fill latency.
+# Defaults to 2048 (extraction prompts are ~1200 tokens; format prompts can be larger).
+OLLAMA_FAST_NUM_CTX = int(os.environ.get("OLLAMA_FAST_NUM_CTX", "2048"))
 
 # ── Timeout Controls ─────────────────────────────────────────────────────────
 # Hard timeout (seconds) for a single Ollama generation call.

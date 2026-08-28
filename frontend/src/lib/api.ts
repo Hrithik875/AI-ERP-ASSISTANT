@@ -6,6 +6,10 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const ADMIN_API_KEY = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "";
+
+/** Headers required for every /db/* admin-console request. */
+const adminHeaders = (): HeadersInit => ({ "X-Admin-Key": ADMIN_API_KEY });
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -503,7 +507,7 @@ export interface SqlResult {
  * Fetch all tables with their column info and row counts.
  */
 export async function fetchTables(): Promise<TableInfo[]> {
-  const res = await fetch(`${API_BASE}/db/tables`);
+  const res = await fetch(`${API_BASE}/db/tables`, { headers: adminHeaders() });
   if (!res.ok) throw new Error(`Failed to fetch tables: ${res.status}`);
   return res.json();
 }
@@ -528,7 +532,7 @@ export async function fetchTableData(
   if (options.sortOrder) params.set("sort_order", options.sortOrder);
   if (options.search) params.set("search", options.search);
 
-  const res = await fetch(`${API_BASE}/db/tables/${tableName}?${params}`);
+  const res = await fetch(`${API_BASE}/db/tables/${tableName}?${params}`, { headers: adminHeaders() });
   if (!res.ok) throw new Error(`Failed to fetch table data: ${res.status}`);
   return res.json();
 }
@@ -542,7 +546,7 @@ export async function insertTableRow(
 ): Promise<{ success: boolean; id: number; message: string }> {
   const res = await fetch(`${API_BASE}/db/tables/${tableName}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...adminHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ data }),
   });
   if (!res.ok) {
@@ -562,7 +566,7 @@ export async function updateTableRow(
 ): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/db/tables/${tableName}/${rowId}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...adminHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ data }),
   });
   if (!res.ok) {
@@ -581,6 +585,7 @@ export async function deleteTableRow(
 ): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/db/tables/${tableName}/${rowId}`, {
     method: "DELETE",
+    headers: adminHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -595,7 +600,7 @@ export async function deleteTableRow(
 export async function executeSql(sql: string): Promise<SqlResult> {
   const res = await fetch(`${API_BASE}/db/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...adminHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({ sql }),
   });
   if (!res.ok) {
@@ -624,6 +629,7 @@ export async function importTableData(
 
   const res = await fetch(`${API_BASE}/db/import/${tableName}`, {
     method: "POST",
+    headers: adminHeaders(),
     body: formData,
   });
   if (!res.ok) {
