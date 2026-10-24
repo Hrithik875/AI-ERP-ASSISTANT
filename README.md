@@ -447,4 +447,22 @@ AI-ERP-ASSISTANT/
 
 ---
 
+---
+
+## 👥 Project Contributors
+
+This project was collaboratively developed by the following team members:
+
+| Name | GitHub Profile |
+|---|---|
+| **Hrithik** | [@Hrithik875](https://github.com/Hrithik875) |
+| **Varsha Tolani** | [@Varshatolani14](https://github.com/Varshatolani14) |
+| **Aadwi** | [@marvelayush](https://github.com/adwi-30) |
+| **Ayush Narayan** | [@adwi-30](https://github.com/marvelayush) |
+
+We acknowledge the contributions and collaborative efforts of all team members in developing the AI ERP Assistant.
+
+---
+
+
 *Built as part of a cloud computing academic project. Phase 8 of 8 — documentation complete.*
