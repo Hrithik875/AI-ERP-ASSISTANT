@@ -465,4 +465,4 @@ We acknowledge the contributions and collaborative efforts of all team members i
 ---
 
 
-*Built as part of a cloud computing academic project. Phase 8 of 8 — documentation complete.*
+*Built as part of a cloud computing academic project. Phase 8 of 8 — documentation complete.*.
